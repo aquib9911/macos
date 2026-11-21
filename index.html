@@ -174,10 +174,26 @@ button{font:inherit;border:0;background:none;cursor:pointer;color:inherit}
 .interests{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .interests .ptile{aspect-ratio:4/5;border-radius:14px}
 @media (max-width:700px){
-  .cv{grid-template-columns:1fr;min-height:0}
-  .cv-side{flex-direction:row;position:sticky;top:0;z-index:1;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);background:rgba(246,246,248,.7)}
-  .cv-tab{justify-content:center;gap:6px}
+  /* phones keep the same sidebar-on-the-left layout, just narrower */
+  .cv{grid-template-columns:100px 1fr;gap:6px;min-height:0}
+  .cv-side{padding:4px}
+  .cv-tab{font-size:12px;padding:6px 7px}
+  .cv-main{padding:12px 12px 16px;font-size:12.5px}
 }
+
+/* Trash = bin of ideas */
+.bin-icon{width:48px;height:48px;object-fit:contain;flex:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.15))}
+.bin-prev summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:7px;font-size:13px;padding:6px 10px;user-select:none;-webkit-user-select:none}
+.bin-prev summary::-webkit-details-marker{display:none}
+.bin-prev summary::before{content:"";border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid rgba(0,0,0,.5);transform:rotate(-90deg);transition:transform .2s var(--ease-out)}
+.bin-prev[open] summary::before{transform:none}
+.bin-list{display:flex;flex-direction:column;gap:14px;padding:6px 10px 12px}
+.bin-card{margin:0;animation:tileIn .55s var(--ease-spring) both;animation-delay:calc(var(--i) * 70ms + 180ms)}
+.bin-img{aspect-ratio:4/3;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.18),inset 0 0 0 .5px rgba(255,255,255,.3)}
+.bin-card figcaption{margin-top:7px;font-size:12.5px;line-height:1.35;color:rgba(0,0,0,.7);padding:6px 10px;border-radius:8px;background:var(--glass-strong);box-shadow:var(--panel-edge)}
+.bin-deleted{padding:0 2px 10px}
+.bin-deleted .trash-list{min-height:0}
+.bin-sect{font-size:13px;font-weight:600;padding:2px 8px 8px}
 
 /* trash window */
 .trash-list{background:var(--glass-strong);border-radius:var(--r-panel);box-shadow:var(--panel-edge);min-height:160px;padding:8px 0}
@@ -323,6 +339,21 @@ const SITE = {
     ],
     clients: ['Client One', 'Client Two', 'Client Three', 'Client Four', 'Client Five', 'Client Six'],
     interests: []   // image URLs for the Interests tab, e.g. ['images/me-1.jpg', 'images/me-2.jpg']
+  },
+
+  // Trash window (dock → Trash): a bin of side projects, experiments and leftovers.
+  // Each item is a picture with a caption under it. Put pictures in assets/ and set img, e.g. 'assets/bin-1.jpg'.
+  bin: {
+    title: 'Idea bin',
+    subtitle: 'Side projects, experiments and leftovers',
+    items: [
+      { img: '', caption: 'Type experiment for a music video' },
+      { img: '', caption: 'Tour key visual, alternate version' },
+      { img: '', caption: 'Lettering study' },
+      { img: '', caption: 'Festival merch draft' },
+      { img: '', caption: 'EP cover sketch' },
+      { img: '', caption: 'Mural concept' },
+    ]
   }
 };
 
@@ -526,6 +557,14 @@ function visible(el) { return el && el.isConnected && el.getClientRects().length
 
 /* zoom a window from / to a source element (icon or dock item) */
 function zoomWin(el, from, opening) {
+  // phones: a quick pop in and out, like bychudy.com's mobile version (no zoom from the icon)
+  if (isMobile()) {
+    const shown = { opacity: 1, transform: 'none' };
+    const hidden = { opacity: 0, transform: 'scale(.96)' };
+    return el.animate(opening ? [hidden, shown] : [shown, hidden], {
+      duration: dur(opening ? 180 : 140), easing: opening ? 'cubic-bezier(.2,.9,.3,1)' : 'ease-in', fill: opening ? 'none' : 'forwards'
+    });
+  }
   const w = center(el);
   let dx = 0, dy = 30, s = .92;
   if (visible(from)) { const f = center(from); dx = f.x - w.x; dy = f.y - w.y; s = Math.max(.05, f.w / w.w); }
@@ -956,10 +995,24 @@ function putBack(s) {
     { duration: dur(520), easing: 'cubic-bezier(.22,1.3,.36,1)' });
   refreshTrash();
 }
+/* the Trash window: a "bin of ideas" — header, a collapsible Preview list of pictures with captions,
+   and (only if you've dragged icons in) the icons waiting to be put back */
 function trashBody() {
-  if (!trashed.length) return `<div class="trash-list"><div class="trash-empty">Trash is empty. Drag an icon here to bin it.</div></div>`;
-  return `<div class="trash-list">${trashed.map(s => `<div class="trash-row"><div class="f-art" style="background:${art(s.p)}"></div>${esc(s.p.title)}<button data-id="${s.p.id}">Put Back</button></div>`).join('')}</div>
-    <div class="trash-foot"><button data-all>Put Back All</button></div>`;
+  const bin = SITE.bin;
+  const cards = bin.items.map((it, i) => {
+    const p = PROJECTS[i % PROJECTS.length];
+    const bg = it.img ? `center/cover no-repeat url('${it.img}')` : art(p, i % 3 + 1);
+    return `<figure class="bin-card" style="--i:${i}"><div class="bin-img" style="background:${bg}"></div><figcaption>${esc(it.caption)}</figcaption></figure>`;
+  }).join('');
+  const deleted = trashed.length ? `
+    <div class="bin-deleted"><div class="bin-sect">Recently deleted</div>
+      <div class="trash-list">${trashed.map(s => `<div class="trash-row"><div class="f-art" style="background:${art(s.p)}"></div>${esc(s.p.title)}<button data-id="${s.p.id}">Put Back</button></div>`).join('')}</div>
+      <div class="trash-foot"><button data-all>Put Back All</button></div></div>` : '';
+  return `
+    <div class="info-head">${TRASH_ICON ? `<img class="bin-icon" src="${TRASH_ICON}" alt="">` : ''}
+      <div><div class="info-title">${esc(bin.title)}</div><div class="info-client">${esc(bin.subtitle)}</div></div></div>
+    ${deleted}
+    <details class="bin-prev" open><summary>Preview:</summary><div class="bin-list">${cards}</div></details>`;
 }
 function refreshTrash() {
   dockItems.trash.querySelector('.di').innerHTML = trashSVG(trashed.length > 0);
@@ -971,7 +1024,7 @@ function bindTrash(w) {
   const all = $('[data-all]', w.el); if (all) all.onclick = () => [...trashed].forEach(putBack);
 }
 function openTrash(from) {
-  const w = openWindow('trash', { title: 'Trash', body: trashBody(), from, width: 420, dockKey: 'trash', mini: '#d9d9de' });
+  const w = openWindow('trash', { title: `Information about: ${SITE.bin.title}`, body: trashBody(), from, width: 520, dockKey: 'trash', mini: '#d9d9de' });
   bindTrash(w);
 }
 
@@ -1008,11 +1061,11 @@ const DOCK = [
   { key: 'ae',       tip: 'After Effects',    html: imgIcon('assets/aftereffects.png'), run: b => showAppAlert('ae', b) },
   { key: 'ps',       tip: 'Photoshop',        html: imgIcon('assets/photoshop.png'),    run: b => showAppAlert('ps', b) },
   { key: 'ai',       tip: 'Illustrator',      html: imgIcon('assets/illustrator.png'),  run: b => showAppAlert('ai', b) },
+  { key: 'error',    tip: 'Error',            html: imgIcon('assets/error.png', 9),      run: b => showAppAlert('error', b) },
   'sep',
   { key: 'cv',       tip: 'CV',               html: imgIcon('assets/notes.png'),           run: openCV },
-  { key: 'error',    tip: 'Error',            html: imgIcon('assets/error.png', 9),      run: b => showAppAlert('error', b) },
-  { key: 'projects', tip: 'Projects',         html: imgIcon('assets/folder.png'), run: openProjectsFolder },
   { key: 'gallery',  tip: 'Gallery',          html: imgIcon('assets/gallery.png'), run: openGallery },
+  { key: 'projects', tip: 'Projects',         html: imgIcon('assets/folder.png'), run: openProjectsFolder },
   'sep',
   { key: 'social',   tip: SITE.social.label,  html: imgIcon('assets/instagram.png'), run: () => open(SITE.social.url, '_blank', 'noopener') },
   { key: 'mail',     tip: 'Mail',             html: imgIcon('assets/mail.png'), run: () => { location.href = 'mailto:' + SITE.email; } },

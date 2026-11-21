@@ -33,6 +33,7 @@ What's in `SITE`:
 | `social` | The **Instagram** dock icon: `label` and `url` (your profile link) |
 | `wallpaper`, `wallpaperBlur` | The background picture, and how blurred it is (`0` = sharp) |
 | `cv` | The **CV** window: `intro`, `canDo`, `experience`, `clients`, `interests` |
+| `bin` | The **Trash** window: `title`, `subtitle`, and `items` (each a picture `img` with a `caption`) |
 | `downloads` | The files in the **Downloads** stack |
 | `appAlerts` | The joke pop-ups for **Ae**, **Ps**, **Ai** and **Error** |
 
