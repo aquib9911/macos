@@ -241,12 +241,21 @@ button{font:inherit;border:0;background:none;cursor:pointer;color:inherit}
 .glyph{border-radius:23%;position:relative;box-shadow:0 2px 5px rgba(0,0,0,.22),inset 0 0 0 .5px rgba(0,0,0,.08);overflow:hidden}
 
 @media (max-width:700px){
-  .icon{width:86px}
-  .thumb{width:54px;height:54px;padding:4px}
-  .label{font-size:9px;max-width:86px}
-  .dock-inner{--base:min(40px, calc((100vw - 136px) / 10));--gap:4px;padding:6px 7px;height:calc(var(--base) + 12px);border-radius:22px}
+  .icon{width:80px}
+  .thumb{width:52px;height:52px;padding:4px}
+  .label{font-size:9px;max-width:80px}
   .tip{display:none}
-  .window{max-height:calc(100vh - 110px)}
+  .window{max-height:calc(100vh - 20px)}
+
+  /* phones: the dock is a vertical bar on the left edge (size set by fitDock() in the script) */
+  .dock{left:6px;bottom:auto;top:50%;transform:translateY(-50%)}
+  .dock-inner{--base:40px;--gap:4px;flex-direction:column;align-items:flex-start;height:auto;width:calc(var(--base) + 12px);padding:6px;border-radius:22px}
+  .dock-sep{width:auto;height:1px;align-self:stretch;margin:3px 4px;
+    background:linear-gradient(90deg,rgba(0,0,0,0),rgba(0,0,0,.2) 18%,rgba(0,0,0,.2) 82%,rgba(0,0,0,0));box-shadow:0 1px 0 rgba(255,255,255,.35)}
+  .dock-item.running::after{left:-5px;top:50%;bottom:auto;transform:translateY(-50%)}
+
+  /* Downloads stack fans out to the right of the dock */
+  .fan-side .fan-item{right:auto;left:0;flex-direction:row-reverse;transform-origin:left center}
 }
 @media (prefers-reduced-motion:reduce){
   .orb{animation:none}
@@ -390,21 +399,33 @@ addEventListener('pointermove', e => { mx = (e.clientX / innerWidth - .5); my = 
 const icons = new Map();
 let zTop = 100;
 
+/* phones: room taken by the vertical dock on the left (px) */
+function dockSpace() { return isMobile() ? dockInner.offsetWidth + 12 : 0; }
+
+/* the free area windows and alerts can use, keeping clear of the dock */
+function workArea() {
+  if (!isMobile()) return { left: 10, top: 12, right: innerWidth - 10, bottom: innerHeight - 90 };
+  return { left: dockSpace(), top: 10, right: innerWidth - 8, bottom: innerHeight - 10 };
+}
+
 function layoutIcons() {
   const list = [...icons.values()].filter(s => !s.trashed);
-  // phones get the same scattered desktop, stretched down the taller screen (y 11–63% → ~10–80%)
+  // phones get the same scattered desktop, stretched down the whole taller screen (y 11–63% → ~9–90%)
+  // and squeezed into the space to the right of the dock
   const mobile = isMobile();
+  const left = dockSpace(), usable = innerWidth - left - 6;
   list.forEach(s => {
-    s.x = s.p.x;
-    s.y = mobile ? 6 + (s.p.y - 8) * 1.35 : s.p.y;
+    s.x = mobile ? (left + s.p.x / 100 * usable) / innerWidth * 100 : s.p.x;
+    s.y = mobile ? 5 + (s.p.y - 8) * 1.55 : s.p.y;
     place(s);
   });
 }
 
 function place(s) { s.el.style.left = s.x + '%'; s.el.style.top = s.y + '%'; }
 function clampIcon(s) {
-  s.x = Math.min(97, Math.max(3, s.x));
-  s.y = Math.min(80, Math.max(6, s.y));
+  const minX = isMobile() ? (dockSpace() + 36) / innerWidth * 100 : 3;
+  s.x = Math.min(97, Math.max(minX, s.x));
+  s.y = Math.min(isMobile() ? 90 : 80, Math.max(6, s.y));
   place(s);
 }
 
@@ -546,12 +567,13 @@ function openWindow(key, { title, body, from, width = 560, mini, dockKey }) {
     <div class="wbody">${body}</div>`;
   winLayer.appendChild(el);
 
-  const W = Math.min(width, innerWidth - 20);
+  const a = workArea();
+  const W = Math.min(width, a.right - a.left);
   el.style.width = W + 'px';
   const H = el.offsetHeight;
   const n = wins.size % 6;
-  const left = Math.min(innerWidth - W - 10, Math.max(10, (innerWidth - W) / 2 - 70 + n * 28));
-  const top = Math.max(12, Math.min(innerHeight - H - 90, (innerHeight - H) / 2 - 50 + n * 28));
+  const left = Math.min(a.right - W, Math.max(a.left, (a.left + a.right - W) / 2 - (isMobile() ? 0 : 70) + n * 28));
+  const top = Math.max(a.top, Math.min(a.bottom - H, (innerHeight - H) / 2 - 50 + n * 28));
   el.style.left = left + 'px';
   el.style.top = top + 'px';
 
@@ -604,8 +626,13 @@ function toggleMax(w) {
   const first = el.getBoundingClientRect();
   if (!w.maxed) {
     w.prev = { left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height };
-    const pad = isMobile() ? 8 : 14;
-    Object.assign(el.style, { left: pad + 'px', top: pad + 'px', width: innerWidth - pad * 2 + 'px', height: innerHeight - pad - 96 + 'px' });
+    if (isMobile()) {
+      const a = workArea();
+      Object.assign(el.style, { left: a.left + 'px', top: a.top + 'px', width: a.right - a.left + 'px', height: a.bottom - a.top + 'px' });
+    } else {
+      const pad = 14;
+      Object.assign(el.style, { left: pad + 'px', top: pad + 'px', width: innerWidth - pad * 2 + 'px', height: innerHeight - pad - 96 + 'px' });
+    }
     el.classList.add('maxed');
   } else {
     Object.assign(el.style, w.prev);
@@ -623,14 +650,19 @@ function toggleMax(w) {
    The window is cut into thin horizontal strips (each a clipped copy of the window).
    Phase 1: the sides bend into a funnel that narrows towards the dock icon (bottom first).
    Phase 2: the content slides down the funnel and squeezes into the icon.
-   Restoring plays the same thing backwards. */
+   Restoring plays the same thing backwards.
+   On phones the dock is on the left, so the same effect runs sideways: the window is cut
+   into thin columns and pours left into the dock. */
 function genie(w, target, reverse) {
   return new Promise(done => {
     const el = w.el;
     const r = el.getBoundingClientRect();
     const scroll = $('.wbody', el).scrollTop;
-    const N = Math.max(28, Math.min(64, Math.round(r.height / 7)));
-    const sh = r.height / N;
+    const side = isMobile();                          // dock on the left → pour sideways
+    const len = side ? r.width : r.height;            // size along the direction of travel
+    // phones get fewer, wider strips so the animation stays smooth on slower hardware
+    const N = side ? Math.max(20, Math.min(32, Math.round(len / 12))) : Math.max(28, Math.min(64, Math.round(len / 7)));
+    const sh = len / N;
 
     const stage = document.createElement('div');
     stage.className = 'genie-stage';
@@ -638,12 +670,13 @@ function genie(w, target, reverse) {
     for (let i = 0; i < N; i++) {
       const s = document.createElement('div');
       s.className = 'genie-strip';
-      Object.assign(s.style, { left: r.left + 'px', top: r.top + i * sh + 'px', width: r.width + 'px', height: sh + 2 + 'px' });
+      if (side) Object.assign(s.style, { left: r.left + i * sh + 'px', top: r.top + 'px', width: sh + 2 + 'px', height: r.height + 'px' });
+      else Object.assign(s.style, { left: r.left + 'px', top: r.top + i * sh + 'px', width: r.width + 'px', height: sh + 2 + 'px' });
       const c = el.cloneNode(true);
       c.classList.add('genie-clone');
       c.classList.remove('minimized');
       c.removeAttribute('id');
-      Object.assign(c.style, { left: '0px', top: -i * sh + 'px', width: r.width + 'px', height: r.height + 'px', visibility: 'visible', zIndex: 'auto' });
+      Object.assign(c.style, { left: side ? -i * sh + 'px' : '0px', top: side ? '0px' : -i * sh + 'px', width: r.width + 'px', height: r.height + 'px', visibility: 'visible', zIndex: 'auto' });
       s.appendChild(c);
       stage.appendChild(s);
       strips.push(s);
@@ -661,13 +694,47 @@ function genie(w, target, reverse) {
       const t = Math.min(1, (now - t0) / D);
       const p = reverse ? 1 - t : t;
       const tr = target();                                   // dock slot, read live so it follows the dock growing
+      const bend  = inOut(Math.min(1, p / .42));             // phase 1
+      const slide = inOut(Math.max(0, (p - .22) / .78));     // phase 2
+
+      if (side) {
+        // ── sideways version for the left-hand dock ──
+        const th = Math.max(tr.height * .82, 6);              // funnel mouth (top–bottom)
+        const tt = tr.top + (tr.height - th) / 2;
+        const tx = tr.left + tr.width * .12;                  // where the window lands
+        const tw = Math.max(tr.width * .76, 4);
+        const span = Math.max(40, r.right - (tx + tw));
+        for (let i = 0; i < N; i++) {
+          const x0 = r.left + i * sh;
+          const x = lerp(x0, tx + i * (tw / N), slide);
+          const wv = lerp(sh, tw / N, slide);
+          // funnel top/bottom at the left and right of this column (S-curve towards the dock)
+          const edge = xx => {
+            const f = Math.min(1, Math.max(0, (r.right - xx) / span));
+            const k = (1 - Math.cos(f * Math.PI)) / 2 * bend;
+            return [lerp(r.top, tt, k), lerp(r.bottom, tt + th, k)];
+          };
+          const [tL, bL] = edge(x), [tR, bR] = edge(x + wv);
+          const T = Math.min(tL, tR), B = Math.max(bL, bR);
+          const sy = Math.max(.001, (B - T) / r.height);
+          const s = strips[i].style;
+          s.transform = `translate3d(${x - x0}px, ${T - r.top}px, 0) scale(${wv / sh}, ${sy})`;
+          const y = v => ((v - T) / sy).toFixed(2) + 'px';
+          s.clipPath = `polygon(0 ${y(tL)}, 100% ${y(tR)}, 100% ${y(bR)}, 0 ${y(bL)})`;
+        }
+        stage.style.opacity = p > .92 ? (1 - p) / .08 : 1;
+        if (t < 1) return requestAnimationFrame(frame);
+        if (!reverse) el.classList.add('minimized');
+        el.style.visibility = '';
+        stage.remove();
+        return done();
+      }
+
       const tw = Math.max(tr.width * .82, 6);
       const tl = tr.left + (tr.width - tw) / 2;
       const ty = tr.top + tr.height * .12;                   // where the funnel ends
       const th = Math.max(tr.height * .76, 4);
       const span = Math.max(40, ty - r.top);
-      const bend  = inOut(Math.min(1, p / .42));             // phase 1
-      const slide = inOut(Math.max(0, (p - .22) / .78));     // phase 2
 
       for (let i = 0; i < N; i++) {
         const y0 = r.top + i * sh;
@@ -773,10 +840,10 @@ function showAppAlert(key, from) {
     <div class="aa-foot"><button>${esc(a.button)}</button></div>`;
   winLayer.appendChild(el);
   // drop it somewhere near the middle, a little different each time
-  const W = el.offsetWidth, H = el.offsetHeight;
-  const x = (innerWidth - W) / 2 + (Math.random() - .5) * Math.min(260, innerWidth - W - 20);
+  const W = el.offsetWidth, H = el.offsetHeight, ar = workArea();
+  const x = (ar.left + ar.right - W) / 2 + (Math.random() - .5) * Math.max(0, Math.min(260, ar.right - ar.left - W - 20));
   const y = (innerHeight - H) / 2 - 60 + (Math.random() - .5) * 140;
-  el.style.left = Math.max(10, x) + 'px';
+  el.style.left = Math.min(ar.right - W, Math.max(ar.left, x)) + 'px';
   el.style.top = Math.max(10, y) + 'px';
   el.style.zIndex = ++zTop;
   el.animate([{ opacity: 0, transform: 'scale(.86)' }, { opacity: 1, transform: 'scale(1)' }],
@@ -859,8 +926,10 @@ function openDownloads(from) {
   el.className = 'fan';
   el.setAttribute('role', 'menu');
   el.setAttribute('aria-label', 'Downloads');
-  el.style.left = r.left + r.width / 2 + 'px';
-  el.style.top = r.top + 'px';
+  const side = isMobile();                // phones: fan out to the right of the left-hand dock
+  el.classList.toggle('fan-side', side);
+  el.style.left = (side ? r.right + 8 : r.left + r.width / 2) + 'px';
+  el.style.top = (side ? r.bottom : r.top) + 'px';
   const items = SITE.downloads.map((d, i) => {
     const a = document.createElement('a');
     a.className = 'fan-item';
@@ -870,7 +939,9 @@ function openDownloads(from) {
     else a.title = 'Add a link for this file in SITE.downloads';
     a.innerHTML = `<span class="fan-label">${esc(d.name)}</span><span class="fan-icon">${docIcon(d.name)}</span>`;
     // each file sits a step higher, curving slightly right and tilting — the macOS fan
-    a.dataset.to = `translate(${i * i * 2.2}px, ${-10 - i * 60}px) rotate(${i * 1.6}deg)`;
+    a.dataset.to = side
+      ? `translate(${i * i * 1.6}px, ${-i * 58}px) rotate(${-i * 1.4}deg)`
+      : `translate(${i * i * 2.2}px, ${-10 - i * 60}px) rotate(${i * 1.6}deg)`;
     a.onclick = e => {
       if (d.url) { setTimeout(closeFan, 150); return; }
       e.preventDefault();
@@ -1002,10 +1073,21 @@ DOCK.forEach(d => {
 
 function bounce(el) {
   const di = el.querySelector('.di');
+  // bottom dock bounces up; the phone's left-hand dock bounces out to the right
+  const m = isMobile() ? v => `translateX(${v}%)` : v => `translateY(${-v}%)`;
   di.animate([
-    { transform: 'translateY(0)' }, { transform: 'translateY(-38%)', offset: .25 }, { transform: 'translateY(0)', offset: .5 },
-    { transform: 'translateY(-14%)', offset: .7 }, { transform: 'translateY(0)' }
+    { transform: m(0) }, { transform: m(38), offset: .25 }, { transform: m(0), offset: .5 },
+    { transform: m(14), offset: .7 }, { transform: m(0) }
   ], { duration: dur(700), easing: 'ease-out' });
+}
+
+/* phones: size the vertical dock so every icon fits the screen height */
+function fitDock() {
+  if (!isMobile()) { dockInner.style.removeProperty('--base'); return; }
+  const items = dockInner.querySelectorAll('.dock-item').length;
+  const seps = dockInner.querySelectorAll('.dock-sep').length;
+  const room = innerHeight - 24 - 12 - seps * 7 - (items + seps - 1) * 4;
+  dockInner.style.setProperty('--base', Math.max(22, Math.min(40, room / items)).toFixed(1) + 'px');
 }
 
 function setRunning() {
@@ -1021,6 +1103,7 @@ function addMini(w) {
   b.onclick = () => restoreWin(w);
   b.style.setProperty('--s', 0);
   dockInner.insertBefore(b, dockItems.trash);
+  fitDock();
   requestAnimationFrame(() => b.style.setProperty('--s', 1));
   w.miniEl = b;
   return b;
@@ -1028,7 +1111,7 @@ function addMini(w) {
 function removeDockItem(b) {
   b.style.setProperty('--s', 0);
   b.style.opacity = 0;
-  setTimeout(() => b.remove(), 260);
+  setTimeout(() => { b.remove(); fitDock(); }, 260);
 }
 
 /* magnification — measured from the resting layout so it doesn't jitter */
@@ -1072,16 +1155,19 @@ addEventListener('keydown', e => {
 /* ════════ Resize ════════ */
 let wasMobile = isMobile();
 addEventListener('resize', () => {
+  fitDock();
   if (isMobile() !== wasMobile) { wasMobile = isMobile(); layoutIcons(); }
+  const a = workArea();
   wins.forEach(w => {
     if (w.maxed) return;
-    const W = Math.min(parseFloat(w.el.style.width), innerWidth - 20);
+    const W = Math.min(parseFloat(w.el.style.width), a.right - a.left);
     w.el.style.width = W + 'px';
-    w.el.style.left = Math.min(Math.max(10, parseFloat(w.el.style.left)), innerWidth - W - 10) + 'px';
+    w.el.style.left = Math.min(Math.max(a.left, parseFloat(w.el.style.left)), a.right - W) + 'px';
   });
 });
 
 /* ════════ Intro ════════ */
+fitDock();
 PROJECTS.forEach(makeIcon);
 layoutIcons();
 
@@ -1098,7 +1184,10 @@ function intro() {
       { transform: 'none', opacity: 1 }
     ], { duration: dur(1000), delay: dur(350 + i * 55), easing: 'cubic-bezier(.22,1.15,.36,1)', fill: 'backwards' });
   });
-  dock.animate([{ transform: 'translate(-50%, 140%)' }, { transform: 'translate(-50%, 0)' }],
+  const dockIn = isMobile()
+    ? [{ transform: 'translate(-140%, -50%)' }, { transform: 'translate(0, -50%)' }]     // phones: slide in from the left
+    : [{ transform: 'translate(-50%, 140%)' }, { transform: 'translate(-50%, 0)' }];
+  dock.animate(dockIn,
     { duration: dur(800), delay: dur(350 + icons.size * 55), easing: 'cubic-bezier(.22,1.2,.36,1)', fill: 'backwards' });
 }
 intro();
