@@ -256,6 +256,9 @@ button{font:inherit;border:0;background:none;cursor:pointer;color:inherit}
 
   /* Downloads stack fans out to the right of the dock */
   .fan-side .fan-item{right:auto;left:0;flex-direction:row-reverse;transform-origin:left center}
+
+  /* phones: windows only open and close — no minimise or zoom buttons */
+  .light.min,.light.max{display:none}
 }
 @media (prefers-reduced-motion:reduce){
   .orb{animation:none}
@@ -548,6 +551,7 @@ function openWindow(key, { title, body, from, width = 560, mini, dockKey }) {
   if (wins.has(key)) {
     const w = wins.get(key);
     if (w.minimized) restoreWin(w);
+    else if (isMobile()) closeWin(w);      // phones: tapping the icon again closes its window
     else { focusWin(w); w.el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.025)' }, { transform: 'scale(1)' }], { duration: dur(260), easing: 'ease-out' }); }
     return w;
   }
@@ -622,17 +626,13 @@ function dragWin(w) {
 }
 
 function toggleMax(w) {
+  if (isMobile()) return;                     // phones: windows only open and close
   const el = w.el;
   const first = el.getBoundingClientRect();
   if (!w.maxed) {
     w.prev = { left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height };
-    if (isMobile()) {
-      const a = workArea();
-      Object.assign(el.style, { left: a.left + 'px', top: a.top + 'px', width: a.right - a.left + 'px', height: a.bottom - a.top + 'px' });
-    } else {
-      const pad = 14;
-      Object.assign(el.style, { left: pad + 'px', top: pad + 'px', width: innerWidth - pad * 2 + 'px', height: innerHeight - pad - 96 + 'px' });
-    }
+    const pad = 14;
+    Object.assign(el.style, { left: pad + 'px', top: pad + 'px', width: innerWidth - pad * 2 + 'px', height: innerHeight - pad - 96 + 'px' });
     el.classList.add('maxed');
   } else {
     Object.assign(el.style, w.prev);
@@ -651,18 +651,14 @@ function toggleMax(w) {
    Phase 1: the sides bend into a funnel that narrows towards the dock icon (bottom first).
    Phase 2: the content slides down the funnel and squeezes into the icon.
    Restoring plays the same thing backwards.
-   On phones the dock is on the left, so the same effect runs sideways: the window is cut
-   into thin columns and pours left into the dock. */
+   Desktop only: on phones windows just open and close. */
 function genie(w, target, reverse) {
   return new Promise(done => {
     const el = w.el;
     const r = el.getBoundingClientRect();
     const scroll = $('.wbody', el).scrollTop;
-    const side = isMobile();                          // dock on the left → pour sideways
-    const len = side ? r.width : r.height;            // size along the direction of travel
-    // phones get fewer, wider strips so the animation stays smooth on slower hardware
-    const N = side ? Math.max(20, Math.min(32, Math.round(len / 12))) : Math.max(28, Math.min(64, Math.round(len / 7)));
-    const sh = len / N;
+    const N = Math.max(28, Math.min(64, Math.round(r.height / 7)));
+    const sh = r.height / N;
 
     const stage = document.createElement('div');
     stage.className = 'genie-stage';
@@ -670,13 +666,12 @@ function genie(w, target, reverse) {
     for (let i = 0; i < N; i++) {
       const s = document.createElement('div');
       s.className = 'genie-strip';
-      if (side) Object.assign(s.style, { left: r.left + i * sh + 'px', top: r.top + 'px', width: sh + 2 + 'px', height: r.height + 'px' });
-      else Object.assign(s.style, { left: r.left + 'px', top: r.top + i * sh + 'px', width: r.width + 'px', height: sh + 2 + 'px' });
+      Object.assign(s.style, { left: r.left + 'px', top: r.top + i * sh + 'px', width: r.width + 'px', height: sh + 2 + 'px' });
       const c = el.cloneNode(true);
       c.classList.add('genie-clone');
       c.classList.remove('minimized');
       c.removeAttribute('id');
-      Object.assign(c.style, { left: side ? -i * sh + 'px' : '0px', top: side ? '0px' : -i * sh + 'px', width: r.width + 'px', height: r.height + 'px', visibility: 'visible', zIndex: 'auto' });
+      Object.assign(c.style, { left: '0px', top: -i * sh + 'px', width: r.width + 'px', height: r.height + 'px', visibility: 'visible', zIndex: 'auto' });
       s.appendChild(c);
       stage.appendChild(s);
       strips.push(s);
@@ -694,47 +689,13 @@ function genie(w, target, reverse) {
       const t = Math.min(1, (now - t0) / D);
       const p = reverse ? 1 - t : t;
       const tr = target();                                   // dock slot, read live so it follows the dock growing
-      const bend  = inOut(Math.min(1, p / .42));             // phase 1
-      const slide = inOut(Math.max(0, (p - .22) / .78));     // phase 2
-
-      if (side) {
-        // ── sideways version for the left-hand dock ──
-        const th = Math.max(tr.height * .82, 6);              // funnel mouth (top–bottom)
-        const tt = tr.top + (tr.height - th) / 2;
-        const tx = tr.left + tr.width * .12;                  // where the window lands
-        const tw = Math.max(tr.width * .76, 4);
-        const span = Math.max(40, r.right - (tx + tw));
-        for (let i = 0; i < N; i++) {
-          const x0 = r.left + i * sh;
-          const x = lerp(x0, tx + i * (tw / N), slide);
-          const wv = lerp(sh, tw / N, slide);
-          // funnel top/bottom at the left and right of this column (S-curve towards the dock)
-          const edge = xx => {
-            const f = Math.min(1, Math.max(0, (r.right - xx) / span));
-            const k = (1 - Math.cos(f * Math.PI)) / 2 * bend;
-            return [lerp(r.top, tt, k), lerp(r.bottom, tt + th, k)];
-          };
-          const [tL, bL] = edge(x), [tR, bR] = edge(x + wv);
-          const T = Math.min(tL, tR), B = Math.max(bL, bR);
-          const sy = Math.max(.001, (B - T) / r.height);
-          const s = strips[i].style;
-          s.transform = `translate3d(${x - x0}px, ${T - r.top}px, 0) scale(${wv / sh}, ${sy})`;
-          const y = v => ((v - T) / sy).toFixed(2) + 'px';
-          s.clipPath = `polygon(0 ${y(tL)}, 100% ${y(tR)}, 100% ${y(bR)}, 0 ${y(bL)})`;
-        }
-        stage.style.opacity = p > .92 ? (1 - p) / .08 : 1;
-        if (t < 1) return requestAnimationFrame(frame);
-        if (!reverse) el.classList.add('minimized');
-        el.style.visibility = '';
-        stage.remove();
-        return done();
-      }
-
       const tw = Math.max(tr.width * .82, 6);
       const tl = tr.left + (tr.width - tw) / 2;
       const ty = tr.top + tr.height * .12;                   // where the funnel ends
       const th = Math.max(tr.height * .76, 4);
       const span = Math.max(40, ty - r.top);
+      const bend  = inOut(Math.min(1, p / .42));             // phase 1
+      const slide = inOut(Math.max(0, (p - .22) / .78));     // phase 2
 
       for (let i = 0; i < N; i++) {
         const y0 = r.top + i * sh;
@@ -768,7 +729,7 @@ function genie(w, target, reverse) {
 }
 
 async function minimizeWin(w) {
-  if (w.animating || w.minimized) return;
+  if (isMobile() || w.animating || w.minimized) return;   // phones: no minimise
   w.animating = true;
   w.minimized = true;
   w.el.classList.remove('active');
@@ -785,11 +746,15 @@ async function restoreWin(w) {
   w.el.classList.remove('minimized');
   w.minimized = false;
   focusWin(w);
-  if (rect) {
+  if (rect && !isMobile()) {
     w.el.style.visibility = 'hidden';
     removeDockItem(slot);
     await genie(w, () => rect, true);
-  } else zoomWin(w.el, null, true);
+  } else {
+    // a window minimised on desktop and restored after the screen shrank to phone size
+    if (slot) removeDockItem(slot);
+    zoomWin(w.el, slot, true);
+  }
   w.miniEl = null;
   w.animating = false;
 }
