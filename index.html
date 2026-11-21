@@ -861,11 +861,6 @@ function showAppAlert(key, from) {
   alertBox = { key, el };
 }
 
-function openProjectsFolder(from) {
-  const items = PROJECTS.map((p, i) => `<button class="f-item" data-id="${p.id}" style="--i:${i}"><div class="f-art" style="background:${art(p)}"></div><span>${esc(p.title)}</span></button>`).join('');
-  const w = openWindow('folder', { title: 'Projects', body: `<div class="finder">${items}</div>`, from, width: 640, dockKey: 'projects', mini: 'linear-gradient(#7cc4ff,#3a8ee6)' });
-  $$('.f-item', w.el).forEach(b => b.onclick = () => openProject(PROJECTS.find(p => p.id === b.dataset.id), b));
-}
 
 
 function openGallery(from) {
@@ -1069,7 +1064,6 @@ const DOCK = [
   'sep',
   { key: 'cv',       tip: 'CV',               html: imgIcon('assets/notes.png'),           run: openCV },
   { key: 'gallery',  tip: 'Gallery',          html: imgIcon('assets/gallery.png'), run: openGallery },
-  { key: 'projects', tip: 'Projects',         html: imgIcon('assets/folder.png'), run: openProjectsFolder },
   'sep',
   { key: 'social',   tip: SITE.social.label,  html: imgIcon('assets/instagram.png'), run: () => open(SITE.social.url, '_blank', 'noopener') },
   { key: 'mail',     tip: 'Mail',             html: imgIcon('assets/mail.png'), run: () => { location.href = 'mailto:' + SITE.email; } },
@@ -1114,7 +1108,7 @@ function fitDock() {
 
 function setRunning() {
   const keys = new Set([...wins.values()].map(w => w.dockKey).filter(Boolean));
-  ['cv', 'projects', 'gallery', 'trash'].forEach(k => dockItems[k].classList.toggle('running', keys.has(k)));
+  ['cv', 'gallery', 'trash'].forEach(k => dockItems[k].classList.toggle('running', keys.has(k)));
 }
 
 function addMini(w) {

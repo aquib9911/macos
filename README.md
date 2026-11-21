@@ -94,7 +94,7 @@ Each dock icon is a picture in `assets/`. To swap one, upload a square PNG (256 
 | After Effects, Photoshop, Illustrator | `aftereffects.png`, `photoshop.png`, `illustrator.png` |
 | CV | `notes.png` |
 | Error | `error.png` |
-| Projects, Gallery | `folder.png`, `gallery.png` |
+| Gallery | `gallery.png` |
 | Instagram, Mail | `instagram.png`, `mail.png` |
 | Downloads, Trash | `downloads.png`, `trash.png` |
 
