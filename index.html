@@ -272,9 +272,6 @@ button{font:inherit;border:0;background:none;cursor:pointer;color:inherit}
 
   /* Downloads stack fans out to the right of the dock */
   .fan-side .fan-item{right:auto;left:0;flex-direction:row-reverse;transform-origin:left center}
-
-  /* phones: windows only open and close — no minimise or zoom buttons */
-  .light.min,.light.max{display:none}
 }
 @media (prefers-reduced-motion:reduce){
   .orb{animation:none}
@@ -628,7 +625,8 @@ function openWindow(key, { title, body, from, width = 560, mini, dockKey }) {
 
   el.addEventListener('pointerdown', () => focusWin(w));
   $('.close', el).onclick = e => { e.stopPropagation(); closeWin(w); };
-  $('.min', el).onclick = e => { e.stopPropagation(); minimizeWin(w); };
+  // phones show all three buttons but only open/close: yellow simply closes (no Genie), green does nothing
+  $('.min', el).onclick = e => { e.stopPropagation(); if (isMobile()) closeWin(w); else minimizeWin(w); };
   $('.max', el).onclick = e => { e.stopPropagation(); toggleMax(w); };
   $('.titlebar', el).addEventListener('dblclick', e => { if (!e.target.closest('.lights')) toggleMax(w); });
   dragWin(w);
