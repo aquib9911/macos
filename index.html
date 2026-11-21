@@ -1,0 +1,1107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Desktop Portfolio</title>
+<!--
+  DESKTOP PORTFOLIO — motion layout
+  ---------------------------------
+  Everything you need to edit is in the SITE and PROJECTS objects at the top of the <script>.
+  • SITE.wallpaper  → path/URL of your big background photo (leave '' for animated colour blobs)
+  • PROJECTS[].img  → thumbnail image for each desktop icon (leave '' for generated art)
+  • PROJECTS[].x/y  → position on the desktop in % of the screen
+  • PROJECTS[].preview → array of image URLs shown in the window's Preview grid
+  No libraries, no build step. Drop this file on any host.
+-->
+<style>
+:root{
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Inter, system-ui, sans-serif;
+  --select: #0a5ad7;
+  --win-chrome: #ecebea;
+  --win-line: rgba(0,0,0,.14);
+  --text: #1d1d1f;
+  --muted: #6e6e73;
+  --link: #0a84ff;
+  --ease-spring: cubic-bezier(.22,1.25,.36,1);
+  --ease-out: cubic-bezier(.2,.9,.25,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:#fff;color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none}
+button{font:inherit;border:0;background:none;cursor:pointer;color:inherit}
+
+/* ───────── Wallpaper ───────── */
+.wallpaper{position:fixed;inset:-40px;z-index:0;overflow:hidden;will-change:transform}
+.wp-photo{position:absolute;inset:0;background:center/cover no-repeat;filter:blur(10px) saturate(1.05);transform:scale(1.06)}
+.orb{position:absolute;border-radius:50%;filter:blur(70px);opacity:.85;will-change:transform}
+.o1{width:62vmax;height:62vmax;left:18%;top:-12%;background:#f2c7a8;animation:drift1 22s ease-in-out infinite alternate}
+.o2{width:46vmax;height:46vmax;left:46%;top:24%;background:#5b3a2e;opacity:.7;animation:drift2 26s ease-in-out infinite alternate}
+.o3{width:40vmax;height:40vmax;left:-6%;top:40%;background:#c8c3dd;animation:drift3 30s ease-in-out infinite alternate}
+.o4{width:34vmax;height:34vmax;left:62%;top:-10%;background:#e9e4f2;animation:drift2 24s ease-in-out infinite alternate-reverse}
+.o5{width:30vmax;height:30vmax;left:30%;top:58%;background:#1f1c24;opacity:.55;animation:drift1 28s ease-in-out infinite alternate-reverse}
+@keyframes drift1{to{transform:translate(8vw,6vh) scale(1.08)}}
+@keyframes drift2{to{transform:translate(-7vw,-5vh) scale(.94)}}
+@keyframes drift3{to{transform:translate(5vw,-8vh) scale(1.1)}}
+
+/* ───────── Desktop + icons ───────── */
+#desktop{position:fixed;inset:0;z-index:1;touch-action:none}
+.icon{position:absolute;width:118px;transform:translate(-50%,-50%);cursor:default;touch-action:none;outline:none}
+.icon-inner{display:flex;flex-direction:column;align-items:center;gap:5px;transition:transform .25s var(--ease-spring)}
+.thumb{width:66px;height:66px;padding:5px;border-radius:12px;transition:background .15s, box-shadow .15s}
+.art{width:100%;height:100%;border-radius:2px;box-shadow:0 2px 7px rgba(0,0,0,.35);transition:transform .3s var(--ease-spring)}
+.label{font-size:10.5px;font-weight:700;letter-spacing:.01em;color:#fff;text-align:center;text-transform:uppercase;line-height:1.25;
+  text-shadow:0 1px 2px rgba(0,0,0,.85),0 0 8px rgba(0,0,0,.45);padding:1px 5px;border-radius:4px;max-width:118px}
+.icon:hover .art{transform:translateY(-2px) scale(1.04)}
+.icon.selected .thumb{background:rgba(255,255,255,.24);box-shadow:inset 0 0 0 1px rgba(255,255,255,.5),inset 0 1px 0 rgba(255,255,255,.7);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.icon.selected .label{background:rgba(10,90,215,.88);border-radius:6px;text-shadow:none}
+.icon:focus-visible .thumb{box-shadow:0 0 0 2px var(--select)}
+.icon.dragging{z-index:50}
+.icon.dragging .icon-inner{transform:scale(1.08)}
+.icon.dragging .art{box-shadow:0 14px 26px rgba(0,0,0,.4)}
+.icon.trashed{display:none}
+
+.marquee{position:fixed;z-index:2;border:1px solid rgba(255,255,255,.85);background:rgba(255,255,255,.18);border-radius:6px;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);pointer-events:none;display:none}
+
+/* ───────── Liquid Glass ─────────
+   Every window, alert, tooltip and the dock share these tokens.
+   Frame = see-through frosted glass; content sits on lighter inner panels so text stays readable. */
+:root{
+  --glass: rgba(246,246,248,.52);
+  --glass-dim: rgba(240,240,243,.42);
+  --glass-strong: rgba(255,255,255,.66);
+  --glass-soft: rgba(255,255,255,.34);
+  --glass-blur: blur(30px) saturate(1.9) brightness(1.04);
+  --glass-inner: inset 0 1px 0 rgba(255,255,255,.75), inset 0 -1px 1px rgba(255,255,255,.22);
+  --glass-shadow: 0 0 0 .5px rgba(0,0,0,.14), 0 24px 70px rgba(0,0,0,.24), 0 6px 18px rgba(0,0,0,.1);
+  --panel-edge: inset 0 0 0 .5px rgba(255,255,255,.7), 0 1px 2px rgba(0,0,0,.04);
+  --r-win: 22px;
+  --r-panel: 14px;
+}
+/* the bright, light-catching rim on every glass surface */
+.window::before,.app-alert::before,.dock-inner::before,.tip::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;padding:1.2px;pointer-events:none;z-index:3;
+  background:linear-gradient(150deg,rgba(255,255,255,.95),rgba(255,255,255,.22) 28%,rgba(255,255,255,0) 50%,rgba(255,255,255,.18) 72%,rgba(255,255,255,.75));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+
+/* ───────── Windows ───────── */
+#windows{position:fixed;inset:0;z-index:5;pointer-events:none}
+.window{position:absolute;pointer-events:auto;display:flex;flex-direction:column;max-height:min(78vh,760px);
+  background:var(--glass);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
+  border-radius:var(--r-win);overflow:hidden;box-shadow:var(--glass-inner),var(--glass-shadow)}
+.window:not(.active){background:var(--glass-dim)}
+.window.maxed{max-height:none}
+.window.minimized{display:none}
+.titlebar{position:relative;flex:none;height:42px;display:flex;align-items:center;justify-content:center;cursor:default;touch-action:none}
+.wtitle{font-size:13px;font-weight:600;color:rgba(0,0,0,.78);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:calc(100% - 160px)}
+.window:not(.active) .wtitle{color:rgba(0,0,0,.4)}
+.lights{position:absolute;left:16px;top:50%;transform:translateY(-50%);display:flex;gap:9px}
+.light{width:13px;height:13px;border-radius:50%;display:grid;place-items:center;font-size:9px;line-height:1;font-weight:800;color:transparent;
+  box-shadow:inset 0 0 0 .5px rgba(0,0,0,.16),inset 0 1px 1px rgba(255,255,255,.5)}
+.light.close{background:#ff5f57}.light.min{background:#febc2e}.light.max{background:#28c840}
+.window:not(.active) .light{background:rgba(0,0,0,.13)}
+.lights:hover .light{color:rgba(0,0,0,.55)}
+.lights:hover .light.close::after{content:"×";font-size:11px}
+.lights:hover .light.min::after{content:"−";font-size:11px}
+.lights:hover .light.max::after{content:"+";font-size:11px}
+.wbody{flex:1;overflow:auto;overscroll-behavior:contain;user-select:text;-webkit-user-select:text;padding:0 8px 8px}
+
+/* project info window */
+.info-head{display:flex;gap:12px;align-items:center;padding:4px 10px 12px}
+.info-thumb{width:48px;height:48px;border-radius:10px;flex:none;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.info-title{font-size:15px;font-weight:700}
+.info-client{font-size:13px;color:rgba(0,0,0,.6);margin-top:1px}
+.info-desc{background:var(--glass-strong);border-radius:var(--r-panel);padding:12px 14px;box-shadow:var(--panel-edge)}
+.info-desc p{font-size:13px;line-height:1.45;color:rgba(0,0,0,.62)}
+.info-desc p + p{margin-top:2px}
+.info-details{display:grid;grid-template-columns:auto 1fr;gap:6px 8px;padding:14px 10px 6px;font-size:13px;line-height:1.4}
+.info-details dt{text-align:right;color:var(--text);padding-left:14px}
+.info-details dt.sect{text-align:left;padding-left:0;grid-column:1 / -1;margin-bottom:4px;font-weight:600}
+.info-details dd i{font-style:normal;color:var(--muted);padding:0 3px}
+.info-details a{color:var(--link)}
+.preview-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 2px 2px}
+.ptile{aspect-ratio:1;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.16),inset 0 0 0 .5px rgba(255,255,255,.3);transition:transform .3s var(--ease-spring);
+  animation:tileIn .6s var(--ease-spring) both;animation-delay:calc(var(--i) * 60ms + 260ms)}
+.ptile:hover{transform:scale(1.035)}
+@keyframes tileIn{from{opacity:0;transform:translateY(16px) scale(.92)}}
+
+/* finder-style grid window (Projects, Gallery) */
+.finder{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:14px 8px;padding:16px 12px;
+  background:var(--glass-strong);border-radius:var(--r-panel);box-shadow:var(--panel-edge);min-height:100%}
+.f-item{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 4px;border-radius:12px;transition:background .15s;
+  animation:tileIn .5s var(--ease-spring) both;animation-delay:calc(var(--i) * 35ms + 200ms)}
+.f-item:hover{background:rgba(255,255,255,.7);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.9),0 1px 3px rgba(0,0,0,.06)}
+.f-item .f-art{width:56px;height:56px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.f-item span{font-size:11px;text-align:center;line-height:1.25;color:var(--text)}
+
+/* genie minimise — the strips use a solid stand-in for the glass (60 live blurs would stutter) */
+.genie-stage{position:fixed;inset:0;z-index:9500;pointer-events:none}
+.genie-strip{position:absolute;overflow:hidden;transform-origin:0 0;will-change:transform;backface-visibility:hidden}
+.genie-clone,.genie-clone *{animation:none !important;transition:none !important}
+.genie-clone{box-shadow:none !important;-webkit-backdrop-filter:none !important;backdrop-filter:none !important;background:rgba(244,244,247,.95) !important}
+
+/* app alert (Ae / Ps / Ai / Error) — glass alert: icon on top, capsule button */
+.app-alert{position:absolute;pointer-events:auto;width:min(290px,calc(100vw - 24px));padding:20px 18px 16px;border-radius:26px;
+  display:flex;flex-direction:column;align-items:center;text-align:center;color:var(--text);
+  background:rgba(246,246,248,.6);-webkit-backdrop-filter:var(--glass-blur);backdrop-filter:var(--glass-blur);
+  box-shadow:var(--glass-inner),var(--glass-shadow)}
+.aa-icon{width:58px;height:58px;object-fit:contain;margin-bottom:10px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.18))}
+.aa-title{font-size:14px;font-weight:700;margin-bottom:5px}
+.aa-text{font-size:12.5px;line-height:1.4;color:rgba(0,0,0,.68)}
+.aa-foot{align-self:stretch;margin-top:16px}
+.aa-foot button{width:100%;font-size:13px;font-weight:500;color:#fff;padding:7px 14px;border-radius:999px;
+  background:linear-gradient(#3d8cff,#0a6cf0);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 2px 8px rgba(10,108,240,.35)}
+.aa-foot button:hover{filter:brightness(1.07)}
+.aa-foot button:focus-visible{outline:2px solid rgba(80,150,255,.6);outline-offset:2px}
+
+/* CV window — floating glass sidebar + content panel */
+.cv{display:grid;grid-template-columns:156px 1fr;gap:8px;min-height:440px}
+.cv-side{background:var(--glass-soft);border-radius:var(--r-panel);box-shadow:var(--panel-edge);padding:6px;display:flex;flex-direction:column;gap:2px;align-self:stretch}
+.cv-tab{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;font-size:13px;padding:7px 10px;border-radius:9px;color:var(--text);transition:background .15s}
+.cv-tab .n{color:rgba(0,0,0,.45);font-size:12px}
+.cv-tab:hover{background:rgba(255,255,255,.45)}
+.cv-tab.on{background:rgba(255,255,255,.88);box-shadow:0 1px 3px rgba(0,0,0,.08),inset 0 0 0 .5px rgba(255,255,255,.95);font-weight:500}
+.cv-main{background:var(--glass-strong);border-radius:var(--r-panel);box-shadow:var(--panel-edge);padding:16px 20px 22px;font-size:13px;line-height:1.45;min-width:0}
+.cv-pane{animation:paneIn .35s var(--ease-out) both}
+@keyframes paneIn{from{opacity:0;transform:translateY(8px)}}
+.cv-main h4{font-size:13px;font-weight:600;margin:4px 0 10px}
+.cv-main h4:not(:first-child){margin-top:18px}
+.cv-main p{color:#2c2c2e;margin-bottom:12px}
+.checks{list-style:none;display:flex;flex-direction:column;gap:4px}
+.checks li{display:flex;align-items:center;gap:8px;animation:tileIn .45s var(--ease-spring) both;animation-delay:calc(var(--i) * 25ms + 80ms)}
+.checks li::before{content:"";flex:none;width:14px;height:14px;border-radius:50%;
+  background:#f7b500 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M4 7.2l2 2 4-4.4' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/100% no-repeat}
+.interests{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.interests .ptile{aspect-ratio:4/5;border-radius:14px}
+@media (max-width:700px){
+  .cv{grid-template-columns:1fr;min-height:0}
+  .cv-side{flex-direction:row;position:sticky;top:0;z-index:1;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);background:rgba(246,246,248,.7)}
+  .cv-tab{justify-content:center;gap:6px}
+}
+
+/* trash window */
+.trash-list{background:var(--glass-strong);border-radius:var(--r-panel);box-shadow:var(--panel-edge);min-height:160px;padding:8px 0}
+.trash-row{display:flex;align-items:center;gap:10px;padding:6px 14px;font-size:13px}
+.trash-row .f-art{width:28px;height:28px;border-radius:7px}
+.trash-empty{display:grid;place-items:center;height:160px;color:var(--muted);font-size:13px}
+.trash-foot{display:flex;justify-content:flex-end;padding:10px 4px 2px}
+.trash-row button,.trash-foot button{font-size:12px;padding:4px 12px;border-radius:999px;background:rgba(255,255,255,.75);
+  box-shadow:inset 0 0 0 .5px rgba(0,0,0,.14),inset 0 1px 0 rgba(255,255,255,.9),0 1px 3px rgba(0,0,0,.08);transition:background .15s}
+.trash-row button{margin-left:auto}
+.trash-row button:hover,.trash-foot button:hover{background:#fff}
+
+/* ───────── Dock ───────── */
+.dock{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:9000}
+.dock-inner{--base:50px;--gap:8px;position:relative;display:flex;align-items:flex-end;gap:var(--gap);height:calc(var(--base) + 18px);padding:9px 11px;
+  border-radius:26px;background:rgba(255,255,255,.2);
+  -webkit-backdrop-filter:blur(20px) saturate(1.9) brightness(1.05);backdrop-filter:blur(20px) saturate(1.9) brightness(1.05);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6),inset 0 -1px 1px rgba(255,255,255,.2),0 0 0 .5px rgba(0,0,0,.1),0 12px 34px rgba(0,0,0,.18)}
+.dock-item{--s:1;position:relative;flex:none;width:calc(var(--base) * var(--s));height:calc(var(--base) * var(--s));
+  transition:width .25s var(--ease-out),height .25s var(--ease-out)}
+.dock.magnify .dock-item{transition:width .08s linear,height .08s linear}
+.dock-item > .di{width:100%;height:100%;display:block}
+.dock-item > .di > svg,.dock-item > .di > .glyph{width:100%;height:100%;display:block}
+.dock-sep{flex:none;width:1px;align-self:stretch;margin:4px 3px;
+  background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.2) 18%,rgba(0,0,0,.2) 82%,rgba(0,0,0,0));box-shadow:1px 0 0 rgba(255,255,255,.35)}
+.tip{position:absolute;left:50%;bottom:calc(100% + 14px);transform:translate(-50%,4px);white-space:nowrap;
+  font-size:12.5px;font-weight:500;color:var(--text);background:rgba(246,246,248,.62);
+  -webkit-backdrop-filter:blur(20px) saturate(1.8);backdrop-filter:blur(20px) saturate(1.8);
+  padding:5px 12px;border-radius:11px;opacity:0;pointer-events:none;transition:opacity .12s,transform .12s;
+  box-shadow:var(--glass-inner),0 0 0 .5px rgba(0,0,0,.12),0 6px 18px rgba(0,0,0,.15)}
+.dock-item:hover .tip,.dock-item:focus-visible .tip{opacity:1;transform:translate(-50%,0)}
+.dock-item.running::after{content:"";position:absolute;left:50%;bottom:-6px;width:4px;height:4px;border-radius:50%;background:rgba(0,0,0,.55);transform:translateX(-50%)}
+.dock-item.hot{--s:1.35 !important}
+.mini{border-radius:11px;overflow:hidden;background:rgba(246,246,248,.85);box-shadow:0 2px 8px rgba(0,0,0,.22),inset 0 0 0 .5px rgba(255,255,255,.8);display:flex;flex-direction:column;padding:4px}
+.mini .mini-bar{height:5px;display:flex;gap:2px;margin-bottom:3px}
+.mini .mini-bar b{width:4px;height:4px;border-radius:50%;background:#ff5f57}
+.mini .mini-bar b:nth-child(2){background:#febc2e}.mini .mini-bar b:nth-child(3){background:#28c840}
+.mini .mini-art{flex:1;border-radius:6px}
+
+/* Downloads fan */
+.fan{position:fixed;width:0;height:0;z-index:9600}
+.fan-item{position:absolute;right:-26px;bottom:0;display:flex;align-items:center;gap:10px;text-decoration:none;transform-origin:right center;outline:none}
+.fan-icon{width:52px;height:52px;display:grid;place-items:center;flex:none;transition:transform .2s var(--ease-spring)}
+.fan-icon svg{height:52px;width:auto;filter:drop-shadow(0 3px 6px rgba(0,0,0,.25))}
+.fan-label{position:relative;font-size:12.5px;font-weight:500;color:var(--text);white-space:nowrap;padding:4px 11px;border-radius:999px;
+  background:rgba(246,246,248,.66);-webkit-backdrop-filter:blur(18px) saturate(1.8);backdrop-filter:blur(18px) saturate(1.8);
+  box-shadow:var(--glass-inner),0 0 0 .5px rgba(0,0,0,.12),0 4px 14px rgba(0,0,0,.14);transition:background .15s,color .15s}
+.fan-item:hover .fan-label,.fan-item:focus-visible .fan-label{background:#0a6cf0;color:#fff}
+.fan-item:hover .fan-icon{transform:scale(1.08)}
+@media (max-width:700px){ .fan{transform:scale(.82);transform-origin:0 0} }
+
+/* no glass where the browser can't blur, or the visitor asked for less transparency */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .window,.app-alert,.tip{background:rgba(244,244,247,.97)} .dock-inner{background:rgba(240,240,243,.92)}
+}
+@media (prefers-reduced-transparency:reduce){
+  .window,.window:not(.active),.app-alert,.tip{background:#f3f3f5} .dock-inner{background:rgba(238,238,241,.96)}
+}
+
+/* glyph icons drawn in CSS */
+.glyph{border-radius:23%;position:relative;box-shadow:0 2px 5px rgba(0,0,0,.22),inset 0 0 0 .5px rgba(0,0,0,.08);overflow:hidden}
+
+@media (max-width:700px){
+  .icon{width:86px}
+  .thumb{width:54px;height:54px;padding:4px}
+  .label{font-size:9px;max-width:86px}
+  .dock-inner{--base:min(40px, calc((100vw - 136px) / 10));--gap:4px;padding:6px 7px;height:calc(var(--base) + 12px);border-radius:22px}
+  .tip{display:none}
+  .window{max-height:calc(100vh - 110px)}
+}
+@media (prefers-reduced-motion:reduce){
+  .orb{animation:none}
+  *{transition-duration:.01ms !important;animation-duration:.01ms !important;animation-delay:0s !important}
+}
+</style>
+</head>
+<body>
+
+<div class="wallpaper" id="wallpaper" aria-hidden="true">
+  <div class="orb o1"></div><div class="orb o3"></div><div class="orb o4"></div><div class="orb o2"></div><div class="orb o5"></div>
+  <div class="wp-photo" id="wpPhoto"></div>
+</div>
+
+<main id="desktop" aria-label="Projects desktop"></main>
+<div class="marquee" id="marquee"></div>
+<div id="windows"></div>
+
+<nav class="dock" id="dock" aria-label="Dock">
+  <div class="dock-inner" id="dockInner"></div>
+</nav>
+
+<script>
+/* ════════════════════════════════════════════════
+   1. YOUR CONTENT — edit these
+   ════════════════════════════════════════════════ */
+const SITE = {
+  name: 'Your Name',
+  wallpaper: 'assets/wallpaper.jpg',   // desktop background image ('' = animated colour blobs)
+  wallpaperBlur: 0,                    // px of blur on the wallpaper, e.g. 10 for a soft, out-of-focus look
+  email: 'hello@example.com',
+  social: { label: 'Instagram', url: 'https://instagram.com/' },
+
+  // Downloads stack (dock → Downloads): files fan up out of the icon.
+  // Put each file in assets/ and set its url, e.g. { name: 'CV.pdf', url: 'assets/CV.pdf' }. Items with no url just wiggle.
+  downloads: [
+    { name: 'CV.pdf',             url: '' },
+    { name: 'Portfolio-2025.pdf', url: '' },
+    { name: 'Brand-Assets.zip',   url: '' },
+    { name: 'Showreel.mp4',       url: '' },
+  ],
+
+  // Joke alert boxes for Ae / Ps / Ai and the Error icon in the dock
+  appAlerts: {
+    ae: { app: 'Adobe After Effects', text: 'RAM preview made it to frame 3 and gave up. Have you considered a still image?', button: 'Render tomorrow' },
+    ps: { app: 'Adobe Photoshop',     text: 'This file has 412 layers called "Layer 1 copy 7". Photoshop has stopped asking questions.', button: 'Merge everything' },
+    ai: { app: 'Adobe Illustrator',   text: 'The Pen tool added 38 anchor points you never asked for. It will not explain itself.', button: 'Accept my fate' },
+    error: { app: 'System Error',     text: 'The designer has run out of memory. All unsaved ideas were lost, and there is no backup.', button: 'Restart with coffee' },
+  },
+
+  // CV window (dock → CV). Three tabs, like a Notes app.
+  cv: {
+    intro: 'Write two or three lines about who you are and what you do — your roles, your style, and what you bring to a project.',
+    canDo: [
+      'Art Direction', 'Graphic Design', 'Motion Design', 'Key Visuals', 'Logotypes',
+      'Posters', 'Packaging', 'Social media design', 'Web design', 'Photography'
+    ],
+    experience: [
+      'Company One – Your Role (2023–2025)',
+      'Company Two – Your Role (2021–2023)',
+      'Freelance – what you do (since 2019)'
+    ],
+    clients: ['Client One', 'Client Two', 'Client Three', 'Client Four', 'Client Five', 'Client Six'],
+    interests: []   // image URLs for the Interests tab, e.g. ['images/me-1.jpg', 'images/me-2.jpg']
+  }
+};
+
+const PROJECTS = [
+  { id:'brand',    title:'Brand Identity',   client:'Client One',   year:2025, x:14, y:16, colors:['#111','#f4f1ea'], pattern:'rings',  type:['Art Direction','Logo','Typography'] },
+  { id:'campaign', title:'Campaign 2025',    client:'Client Two',   year:2025, x:31, y:12, colors:['#d7263d','#f9e0d9'], pattern:'sun',  type:['Campaign','Key Visual','Social'] },
+  { id:'reel',     title:'Motion Reel',      client:'Studio',       year:2025, x:45, y:22, colors:['#0b1a3a','#5aa9ff'], pattern:'grad', type:['Animation','Video'] },
+  { id:'web',      title:'Website Redesign', client:'Client Three', year:2024, x:61, y:11, colors:['#1b3cff','#e8ecff'], pattern:'grid', type:['Web Design','UI'] },
+  { id:'posters',  title:'Poster Series',    client:'Festival',     year:2024, x:75, y:23, colors:['#ff5a1f','#1a1a1a'], pattern:'stripes', type:['Poster Design','Print'] },
+  { id:'pack',     title:'Packaging',        client:'Client Four',  year:2024, x:88, y:13, colors:['#2f6b4f','#f2e8cf'], pattern:'split', type:['Packaging','Label'] },
+  { id:'social',   title:'Social Kit',       client:'Client Five',  year:2025, x:19, y:37, colors:['#ff3d8b','#ffd2e4'], pattern:'dots', type:['Social','Templates'] },
+  { id:'report',   title:'Annual Report',    client:'Client Six',   year:2024, x:35, y:40, colors:['#0e0e10','#c9a227'], pattern:'split', type:['Editorial','Data Viz'] },
+  { id:'app',      title:'App UI',           client:'Client Seven', year:2025, x:52, y:35, colors:['#6c4cff','#e7e2ff'], pattern:'grad', type:['App Design','UX'] },
+  { id:'event',    title:'Event Visuals',    client:'Venue',        year:2024, x:68, y:42, colors:['#111','#00e0b8'], pattern:'rings', type:['Stage Design','Motion'] },
+  { id:'edit',     title:'Editorial',        client:'Magazine',     year:2023, x:85, y:37, colors:['#f4efe6','#b5432f'], pattern:'stripes', type:['Layout','Typography'] },
+  { id:'photo',    title:'Photo Series',     client:'Personal',     year:2023, x:12, y:59, colors:['#3a2e28','#d9b99b'], pattern:'sun', type:['Photography'] },
+  { id:'type',     title:'Typeface',         client:'Personal',     year:2023, x:28, y:62, colors:['#fff','#111'], pattern:'grid', type:['Type Design'] },
+  { id:'merch',    title:'Merch',            client:'Artist',       year:2024, x:46, y:57, colors:['#d4ff3a','#151515'], pattern:'dots', type:['Merch','Apparel'] },
+  { id:'stage',    title:'Stage Visuals',    client:'Tour',         year:2024, x:62, y:63, colors:['#000','#ff2e2e'], pattern:'grad', type:['VJ','Animation'] },
+  { id:'album',    title:'Album Art',        client:'Musician',     year:2025, x:80, y:59, colors:['#1e3a8a','#f6d365'], pattern:'sun', type:['Cover Art','Vinyl'] },
+].map(p => ({
+  img: '', link: '', preview: [],
+  desc: [
+    `A short story about ${p.title.toLowerCase()} for ${p.client}: what the brief was and why it mattered.`,
+    'What you were responsible for, who you worked with, and the main idea behind the work.',
+    'Swap this text in the PROJECTS list. Add images to "img" and "preview" to replace the generated art.'
+  ],
+  ...p
+}));
+
+/* ════════════════════════════════════════════════
+   2. ENGINE — no need to edit below
+   ════════════════════════════════════════════════ */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const dur = ms => REDUCED ? 1 : ms;
+const isMobile = () => innerWidth <= 700;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const desktop = $('#desktop'), winLayer = $('#windows'), dock = $('#dock'), dockInner = $('#dockInner');
+
+/* ── generated thumbnail art ── */
+const PATTERNS = {
+  rings:  (a,b) => `repeating-radial-gradient(circle at 50% 50%, ${a} 0 5px, ${b} 5px 10px)`,
+  stripes:(a,b) => `repeating-linear-gradient(45deg, ${a} 0 7px, ${b} 7px 14px)`,
+  dots:   (a,b) => `radial-gradient(${b} 28%, transparent 30%) 0 0/11px 11px, ${a}`,
+  split:  (a,b) => `linear-gradient(135deg, ${a} 50%, ${b} 50%)`,
+  sun:    (a,b) => `radial-gradient(circle at 50% 62%, ${b} 0 30%, ${a} 31%)`,
+  grad:   (a,b) => `linear-gradient(160deg, ${a}, ${b})`,
+  grid:   (a,b) => `linear-gradient(${b} 2px, transparent 2px) 0 0/12px 12px, linear-gradient(90deg, ${b} 2px, transparent 2px) 0 0/12px 12px, ${a}`,
+};
+const PKEYS = Object.keys(PATTERNS);
+function art(p, v = 0) {
+  if (v === 0 && p.img) return `center/cover no-repeat url('${p.img}')`;
+  const k = v ? PKEYS[(PKEYS.indexOf(p.pattern) + v) % PKEYS.length] : p.pattern;
+  const [a, b] = v % 2 ? [p.colors[1], p.colors[0]] : p.colors;
+  return PATTERNS[k](a, b);
+}
+
+/* ── wallpaper ── */
+const wp = $('#wallpaper');
+if (SITE.wallpaper) {
+  $('#wpPhoto').style.backgroundImage = `url('${SITE.wallpaper}')`;
+  $('#wpPhoto').style.filter = `blur(${SITE.wallpaperBlur || 0}px)`;
+  $$('.orb').forEach(o => o.remove());
+}
+let mx = 0, my = 0, px = 0, py = 0;
+addEventListener('pointermove', e => { mx = (e.clientX / innerWidth - .5); my = (e.clientY / innerHeight - .5); }, { passive: true });
+(function parallax() {
+  px += (mx - px) * .05; py += (my - py) * .05;
+  if (!REDUCED) wp.style.transform = `translate3d(${-px * 26}px, ${-py * 18}px, 0)`;
+  requestAnimationFrame(parallax);
+})();
+
+/* ════════ Desktop icons ════════ */
+const icons = new Map();
+let zTop = 100;
+
+function layoutIcons() {
+  const list = [...icons.values()].filter(s => !s.trashed);
+  // phones get the same scattered desktop, stretched down the taller screen (y 11–63% → ~10–80%)
+  const mobile = isMobile();
+  list.forEach(s => {
+    s.x = s.p.x;
+    s.y = mobile ? 6 + (s.p.y - 8) * 1.35 : s.p.y;
+    place(s);
+  });
+}
+
+function place(s) { s.el.style.left = s.x + '%'; s.el.style.top = s.y + '%'; }
+function clampIcon(s) {
+  s.x = Math.min(97, Math.max(3, s.x));
+  s.y = Math.min(80, Math.max(6, s.y));
+  place(s);
+}
+
+function makeIcon(p) {
+  const el = document.createElement('div');
+  el.className = 'icon';
+  el.tabIndex = 0;
+  el.setAttribute('role', 'button');
+  el.setAttribute('aria-label', `Open ${p.title}`);
+  el.innerHTML = `<div class="icon-inner"><div class="thumb"><div class="art"></div></div><div class="label">${esc(p.title)}</div></div>`;
+  el.querySelector('.art').style.background = art(p);
+  desktop.appendChild(el);
+  const s = { el, p, x: p.x, y: p.y, trashed: false };
+  icons.set(p.id, s);
+  bindIcon(s);
+  return s;
+}
+
+function clearSelection() { $$('.icon.selected').forEach(e => e.classList.remove('selected')); }
+
+function bindIcon(s) {
+  s.el.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openProject(s.p, s.el); }
+  });
+  s.el.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+    if (!s.el.classList.contains('selected')) { if (!additive) clearSelection(); s.el.classList.add('selected'); }
+    else if (additive) { s.el.classList.remove('selected'); return; }
+
+    const group = [...icons.values()].filter(o => o.el.classList.contains('selected'));
+    const start = { x: e.clientX, y: e.clientY };
+    const origin = group.map(o => ({ o, x: o.x, y: o.y }));
+    let dragging = false;
+    s.el.setPointerCapture(e.pointerId);
+
+    const move = ev => {
+      const dx = ev.clientX - start.x, dy = ev.clientY - start.y;
+      if (!dragging && Math.hypot(dx, dy) < 5) return;
+      if (!dragging) { dragging = true; group.forEach(o => o.el.classList.add('dragging')); }
+      origin.forEach(({ o, x, y }) => { o.x = x + dx / innerWidth * 100; o.y = y + dy / innerHeight * 100; place(o); });
+      setTrashHot(overTrash(ev.clientX, ev.clientY));
+    };
+    const up = ev => {
+      s.el.removeEventListener('pointermove', move);
+      s.el.removeEventListener('pointerup', up);
+      s.el.removeEventListener('pointercancel', up);
+      group.forEach(o => o.el.classList.remove('dragging'));
+      setTrashHot(false);
+      if (!dragging) { if (ev.type === 'pointerup') openProject(s.p, s.el); return; }
+      if (overTrash(ev.clientX, ev.clientY)) group.forEach(trashIcon);
+      else origin.forEach(({ o }) => clampIcon(o));
+    };
+    s.el.addEventListener('pointermove', move);
+    s.el.addEventListener('pointerup', up);
+    s.el.addEventListener('pointercancel', up);
+  });
+}
+
+/* marquee selection on empty desktop */
+const marquee = $('#marquee');
+desktop.addEventListener('pointerdown', e => {
+  if (e.target !== desktop || e.button !== 0) return;
+  clearSelection();
+  const sx = e.clientX, sy = e.clientY;
+  desktop.setPointerCapture(e.pointerId);
+  const move = ev => {
+    const l = Math.min(sx, ev.clientX), t = Math.min(sy, ev.clientY);
+    const w = Math.abs(ev.clientX - sx), h = Math.abs(ev.clientY - sy);
+    Object.assign(marquee.style, { display: 'block', left: l + 'px', top: t + 'px', width: w + 'px', height: h + 'px' });
+    icons.forEach(s => {
+      if (s.trashed) return;
+      const r = s.el.querySelector('.thumb').getBoundingClientRect();
+      const hit = r.right > l && r.left < l + w && r.bottom > t && r.top < t + h;
+      s.el.classList.toggle('selected', hit);
+    });
+  };
+  const up = () => {
+    marquee.style.display = 'none';
+    desktop.removeEventListener('pointermove', move);
+    desktop.removeEventListener('pointerup', up);
+    desktop.removeEventListener('pointercancel', up);
+  };
+  desktop.addEventListener('pointermove', move);
+  desktop.addEventListener('pointerup', up);
+  desktop.addEventListener('pointercancel', up);
+});
+
+/* ════════ Windows ════════ */
+const wins = new Map();
+
+function center(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; }
+function visible(el) { return el && el.isConnected && el.getClientRects().length && getComputedStyle(el).display !== 'none'; }
+
+/* zoom a window from / to a source element (icon or dock item) */
+function zoomWin(el, from, opening) {
+  const w = center(el);
+  let dx = 0, dy = 30, s = .92;
+  if (visible(from)) { const f = center(from); dx = f.x - w.x; dy = f.y - w.y; s = Math.max(.05, f.w / w.w); }
+  const away = { transform: `translate(${dx}px, ${dy}px) scale(${s})` };
+  const home = { transform: 'none' };
+  const frames = opening
+    ? [{ ...away, opacity: 0 }, { opacity: 1, offset: .3 }, { ...home, opacity: 1 }]
+    : [{ ...home, opacity: 1 }, { opacity: 1, offset: .7 }, { ...away, opacity: 0 }];
+  return el.animate(frames, {
+    duration: dur(opening ? 520 : 340),
+    easing: opening ? 'cubic-bezier(.18,.95,.25,1.04)' : 'cubic-bezier(.55,0,.8,.2)',
+    fill: opening ? 'none' : 'forwards'
+  });
+}
+
+function focusWin(w) {
+  wins.forEach(o => o.el.classList.remove('active'));
+  w.el.classList.add('active');
+  w.el.style.zIndex = ++zTop;
+}
+
+function openWindow(key, { title, body, from, width = 560, mini, dockKey }) {
+  if (wins.has(key)) {
+    const w = wins.get(key);
+    if (w.minimized) restoreWin(w);
+    else { focusWin(w); w.el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.025)' }, { transform: 'scale(1)' }], { duration: dur(260), easing: 'ease-out' }); }
+    return w;
+  }
+  const el = document.createElement('section');
+  el.className = 'window';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-label', title);
+  el.innerHTML = `
+    <header class="titlebar">
+      <div class="lights">
+        <button class="light close" aria-label="Close"></button>
+        <button class="light min" aria-label="Minimise"></button>
+        <button class="light max" aria-label="Zoom"></button>
+      </div>
+      <div class="wtitle">${esc(title)}</div>
+    </header>
+    <div class="wbody">${body}</div>`;
+  winLayer.appendChild(el);
+
+  const W = Math.min(width, innerWidth - 20);
+  el.style.width = W + 'px';
+  const H = el.offsetHeight;
+  const n = wins.size % 6;
+  const left = Math.min(innerWidth - W - 10, Math.max(10, (innerWidth - W) / 2 - 70 + n * 28));
+  const top = Math.max(12, Math.min(innerHeight - H - 90, (innerHeight - H) / 2 - 50 + n * 28));
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+
+  const w = { key, el, from, mini, dockKey, minimized: false, maxed: false };
+  wins.set(key, w);
+  focusWin(w);
+  zoomWin(el, from, true);
+  setRunning();
+
+  el.addEventListener('pointerdown', () => focusWin(w));
+  $('.close', el).onclick = e => { e.stopPropagation(); closeWin(w); };
+  $('.min', el).onclick = e => { e.stopPropagation(); minimizeWin(w); };
+  $('.max', el).onclick = e => { e.stopPropagation(); toggleMax(w); };
+  $('.titlebar', el).addEventListener('dblclick', e => { if (!e.target.closest('.lights')) toggleMax(w); });
+  dragWin(w);
+  return w;
+}
+
+function closeWin(w) {
+  const target = w.dockKey ? dockItems[w.dockKey] : w.from;
+  const a = zoomWin(w.el, target, false);
+  wins.delete(w.key);
+  setRunning();
+  a.onfinish = () => w.el.remove();
+}
+
+function dragWin(w) {
+  const bar = $('.titlebar', w.el);
+  bar.addEventListener('pointerdown', e => {
+    if (e.target.closest('.lights') || e.button !== 0) return;
+    if (w.maxed) return;
+    const sx = e.clientX, sy = e.clientY;
+    const l0 = parseFloat(w.el.style.left), t0 = parseFloat(w.el.style.top);
+    bar.setPointerCapture(e.pointerId);
+    const move = ev => {
+      const l = l0 + ev.clientX - sx;
+      const t = Math.max(0, Math.min(innerHeight - 40, t0 + ev.clientY - sy));
+      w.el.style.left = Math.max(-w.el.offsetWidth + 80, Math.min(innerWidth - 80, l)) + 'px';
+      w.el.style.top = t + 'px';
+    };
+    const up = () => { bar.removeEventListener('pointermove', move); bar.removeEventListener('pointerup', up); bar.removeEventListener('pointercancel', up); };
+    bar.addEventListener('pointermove', move);
+    bar.addEventListener('pointerup', up);
+    bar.addEventListener('pointercancel', up);
+  });
+}
+
+function toggleMax(w) {
+  const el = w.el;
+  const first = el.getBoundingClientRect();
+  if (!w.maxed) {
+    w.prev = { left: el.style.left, top: el.style.top, width: el.style.width, height: el.style.height };
+    const pad = isMobile() ? 8 : 14;
+    Object.assign(el.style, { left: pad + 'px', top: pad + 'px', width: innerWidth - pad * 2 + 'px', height: innerHeight - pad - 96 + 'px' });
+    el.classList.add('maxed');
+  } else {
+    Object.assign(el.style, w.prev);
+    el.classList.remove('maxed');
+  }
+  w.maxed = !w.maxed;
+  const last = el.getBoundingClientRect();
+  el.animate([
+    { transformOrigin: '0 0', transform: `translate(${first.left - last.left}px, ${first.top - last.top}px) scale(${first.width / last.width}, ${first.height / last.height})` },
+    { transformOrigin: '0 0', transform: 'none' }
+  ], { duration: dur(420), easing: 'cubic-bezier(.2,.9,.25,1)' });
+}
+
+/* ── macOS "Genie" effect ──
+   The window is cut into thin horizontal strips (each a clipped copy of the window).
+   Phase 1: the sides bend into a funnel that narrows towards the dock icon (bottom first).
+   Phase 2: the content slides down the funnel and squeezes into the icon.
+   Restoring plays the same thing backwards. */
+function genie(w, target, reverse) {
+  return new Promise(done => {
+    const el = w.el;
+    const r = el.getBoundingClientRect();
+    const scroll = $('.wbody', el).scrollTop;
+    const N = Math.max(28, Math.min(64, Math.round(r.height / 7)));
+    const sh = r.height / N;
+
+    const stage = document.createElement('div');
+    stage.className = 'genie-stage';
+    const strips = [];
+    for (let i = 0; i < N; i++) {
+      const s = document.createElement('div');
+      s.className = 'genie-strip';
+      Object.assign(s.style, { left: r.left + 'px', top: r.top + i * sh + 'px', width: r.width + 'px', height: sh + 2 + 'px' });
+      const c = el.cloneNode(true);
+      c.classList.add('genie-clone');
+      c.classList.remove('minimized');
+      c.removeAttribute('id');
+      Object.assign(c.style, { left: '0px', top: -i * sh + 'px', width: r.width + 'px', height: r.height + 'px', visibility: 'visible', zIndex: 'auto' });
+      s.appendChild(c);
+      stage.appendChild(s);
+      strips.push(s);
+    }
+    document.body.appendChild(stage);
+    $$('.wbody', stage).forEach(b => b.scrollTop = scroll);
+    el.style.visibility = 'hidden';
+
+    const D = REDUCED ? 1 : (window.GENIE_MS || 640);   // speed in ms
+    const inOut = x => x < .5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2;
+    const lerp = (a, b, k) => a + (b - a) * k;
+    const t0 = performance.now();
+
+    function frame(now) {
+      const t = Math.min(1, (now - t0) / D);
+      const p = reverse ? 1 - t : t;
+      const tr = target();                                   // dock slot, read live so it follows the dock growing
+      const tw = Math.max(tr.width * .82, 6);
+      const tl = tr.left + (tr.width - tw) / 2;
+      const ty = tr.top + tr.height * .12;                   // where the funnel ends
+      const th = Math.max(tr.height * .76, 4);
+      const span = Math.max(40, ty - r.top);
+      const bend  = inOut(Math.min(1, p / .42));             // phase 1
+      const slide = inOut(Math.max(0, (p - .22) / .78));     // phase 2
+
+      for (let i = 0; i < N; i++) {
+        const y0 = r.top + i * sh;
+        const y = lerp(y0, ty + i * (th / N), slide);
+        const h = lerp(sh, th / N, slide);
+        // funnel edges at the top and bottom of this strip (S-curve down the funnel)
+        const edge = yy => {
+          const f = Math.min(1, Math.max(0, (yy - r.top) / span));
+          const k = (1 - Math.cos(f * Math.PI)) / 2 * bend;
+          return [lerp(r.left, tl, k), lerp(r.right, tl + tw, k)];
+        };
+        const [lT, rT] = edge(y), [lB, rB] = edge(y + h);
+        const L = Math.min(lT, lB), R = Math.max(rT, rB);
+        const sx = Math.max(.001, (R - L) / r.width);
+        const s = strips[i].style;
+        s.transform = `translate3d(${L - r.left}px, ${y - y0}px, 0) scale(${sx}, ${h / sh})`;
+        // cut each strip into a trapezoid that follows the funnel → smooth slanted edges, no stair-steps
+        const x = v => ((v - L) / sx).toFixed(2) + 'px';
+        s.clipPath = `polygon(${x(lT)} 0, ${x(rT)} 0, ${x(rB)} 100%, ${x(lB)} 100%)`;
+      }
+      stage.style.opacity = p > .92 ? (1 - p) / .08 : 1;
+
+      if (t < 1) return requestAnimationFrame(frame);
+      if (!reverse) el.classList.add('minimized');
+      el.style.visibility = '';
+      stage.remove();
+      done();
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+async function minimizeWin(w) {
+  if (w.animating || w.minimized) return;
+  w.animating = true;
+  w.minimized = true;
+  w.el.classList.remove('active');
+  const slot = addMini(w);
+  await genie(w, () => slot.getBoundingClientRect(), false);
+  w.animating = false;
+}
+
+async function restoreWin(w) {
+  if (w.animating || !w.minimized) return;
+  w.animating = true;
+  const slot = w.miniEl;
+  const rect = slot ? slot.getBoundingClientRect() : null;
+  w.el.classList.remove('minimized');
+  w.minimized = false;
+  focusWin(w);
+  if (rect) {
+    w.el.style.visibility = 'hidden';
+    removeDockItem(slot);
+    await genie(w, () => rect, true);
+  } else zoomWin(w.el, null, true);
+  w.miniEl = null;
+  w.animating = false;
+}
+
+/* ════════ Window contents ════════ */
+function openProject(p, from) {
+  const types = p.type.map(esc).join('<i>›</i>');
+  const tiles = (p.preview.length ? p.preview.map(src => `center/cover no-repeat url('${src}')`) : [1, 2, 3, 4, 5, 6].map(v => art(p, v)))
+    .map((b, i) => `<div class="ptile" style="--i:${i};background:${b}"></div>`).join('');
+  const body = `
+    <div class="info-head">
+      <div class="info-thumb" style="background:${art(p)}"></div>
+      <div><div class="info-title">${esc(p.title)}</div><div class="info-client">${esc(p.client)}</div></div>
+    </div>
+    <div class="info-desc">${p.desc.map(t => `<p>${esc(t)}</p>`).join('')}</div>
+    <dl class="info-details">
+      <dt class="sect">Details:</dt>
+      <dt>Type:</dt><dd>${types}</dd>
+      <dt>Year:</dt><dd>${esc(p.year)}</dd>
+      ${p.link ? `<dt>Link:</dt><dd><a href="${esc(p.link)}" target="_blank" rel="noopener">&gt; Click here &lt;</a></dd>` : ''}
+      <dt>Preview:</dt><dd></dd>
+    </dl>
+    <div class="preview-grid">${tiles}</div>`;
+  openWindow('p-' + p.id, { title: `Information about: ${p.title}`, body, from, width: 620, mini: art(p) });
+}
+
+/* ════════ App alerts (Ae / Ps / Ai) ════════ */
+let alertBox = null;
+function closeAlert() {
+  if (!alertBox) return;
+  const el = alertBox.el;
+  alertBox = null;
+  el.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.94)' }],
+    { duration: dur(160), easing: 'ease-in', fill: 'forwards' }).onfinish = () => el.remove();
+}
+function showAppAlert(key, from) {
+  const same = alertBox && alertBox.key === key;
+  closeAlert();
+  if (same) return;                       // second click on the same icon closes it
+  const a = SITE.appAlerts[key];
+  const icon = from.querySelector('img') ? from.querySelector('img').getAttribute('src') : '';
+  const el = document.createElement('div');
+  el.className = 'app-alert';
+  el.setAttribute('role', 'alertdialog');
+  el.setAttribute('aria-label', a.app);
+  el.innerHTML = `${icon ? `<img class="aa-icon" src="${icon}" alt="">` : ''}
+    <div class="aa-title">${esc(a.app)}</div><p class="aa-text">${esc(a.text)}</p>
+    <div class="aa-foot"><button>${esc(a.button)}</button></div>`;
+  winLayer.appendChild(el);
+  // drop it somewhere near the middle, a little different each time
+  const W = el.offsetWidth, H = el.offsetHeight;
+  const x = (innerWidth - W) / 2 + (Math.random() - .5) * Math.min(260, innerWidth - W - 20);
+  const y = (innerHeight - H) / 2 - 60 + (Math.random() - .5) * 140;
+  el.style.left = Math.max(10, x) + 'px';
+  el.style.top = Math.max(10, y) + 'px';
+  el.style.zIndex = ++zTop;
+  el.animate([{ opacity: 0, transform: 'scale(.86)' }, { opacity: 1, transform: 'scale(1)' }],
+    { duration: dur(320), easing: 'cubic-bezier(.22,1.3,.36,1)' });
+  $('button', el).onclick = closeAlert;
+  $('button', el).focus({ preventScroll: true });
+  alertBox = { key, el };
+}
+
+function openProjectsFolder(from) {
+  const items = PROJECTS.map((p, i) => `<button class="f-item" data-id="${p.id}" style="--i:${i}"><div class="f-art" style="background:${art(p)}"></div><span>${esc(p.title)}</span></button>`).join('');
+  const w = openWindow('folder', { title: 'Projects', body: `<div class="finder">${items}</div>`, from, width: 640, dockKey: 'projects', mini: 'linear-gradient(#7cc4ff,#3a8ee6)' });
+  $$('.f-item', w.el).forEach(b => b.onclick = () => openProject(PROJECTS.find(p => p.id === b.dataset.id), b));
+}
+
+
+function openGallery(from) {
+  const tiles = PROJECTS.flatMap((p, i) => [0, 2].map(v => ({ p, b: v ? art(p, v) : art(p), i })))
+    .map((t, k) => `<button class="ptile" data-id="${t.p.id}" style="--i:${k % 18};background:${t.b}" aria-label="${esc(t.p.title)}"></button>`).join('');
+  const w = openWindow('gallery', { title: 'Gallery', body: `<div class="preview-grid" style="grid-template-columns:repeat(auto-fill,minmax(110px,1fr));background:#fff">${tiles}</div>`, from, width: 700, dockKey: 'gallery', mini: 'linear-gradient(135deg,#ffb36b,#ff5fa2,#7a5cff)' });
+  $$('.ptile', w.el).forEach(b => b.onclick = () => openProject(PROJECTS.find(p => p.id === b.dataset.id), b));
+}
+
+/* ════════ CV (notes-style, three tabs) ════════ */
+function openCV(from) {
+  const cv = SITE.cv;
+  const checks = list => `<ul class="checks">${list.map((t, i) => `<li style="--i:${i}">${esc(t)}</li>`).join('')}</ul>`;
+  const interestTiles = cv.interests.length
+    ? cv.interests.map(src => `center/cover no-repeat url('${src}')`)
+    : PROJECTS.slice(0, 6).map((p, i) => art(p, i % 3 + 1));
+  const panes = {
+    about: { label: 'About me', n: cv.canDo.length,
+      html: `<p>${esc(cv.intro)}</p><h4>I can do…</h4>${checks(cv.canDo)}` },
+    cv: { label: 'CV', n: cv.experience.length + cv.clients.length,
+      html: `<h4>Experience</h4>${checks(cv.experience)}<h4>Worked with</h4>${checks(cv.clients)}` },
+    interests: { label: 'Interests', n: '∞',
+      html: `<div class="interests">${interestTiles.map((b, i) => `<div class="ptile" style="--i:${i};background:${b}"></div>`).join('')}</div>` },
+  };
+  const tabs = Object.entries(panes).map(([k, p], i) =>
+    `<button class="cv-tab${i ? '' : ' on'}" data-k="${k}"><span>${p.label}</span><span class="n">${p.n}</span></button>`).join('');
+  const w = openWindow('cv', {
+    title: `Information about: ${SITE.name}, ${SITE.email}`,
+    body: `<div class="cv"><nav class="cv-side">${tabs}</nav><div class="cv-main"><div class="cv-pane">${panes.about.html}</div></div></div>`,
+    from, width: 680, dockKey: 'cv', mini: 'linear-gradient(#fff 0 30%, #f7b500 30% 34%, #fff 34%)'
+  });
+  $$('.cv-tab', w.el).forEach(b => b.onclick = () => {
+    if (b.classList.contains('on')) return;
+    $$('.cv-tab', w.el).forEach(t => t.classList.toggle('on', t === b));
+    $('.cv-main', w.el).innerHTML = `<div class="cv-pane">${panes[b.dataset.k].html}</div>`;
+    $('.wbody', w.el).scrollTop = 0;
+  });
+}
+
+/* ════════ Downloads stack — macOS-style fan ════════ */
+const EXT_COLORS = { pdf: '#e5322d', zip: '#8e8e93', mp4: '#7d4cdb', mov: '#7d4cdb', jpg: '#1e88e5', jpeg: '#1e88e5', png: '#1e88e5', ai: '#ff7c00', psd: '#31a8ff', fig: '#a259ff' };
+function docIcon(name) {
+  const ext = (name.includes('.') ? name.split('.').pop() : '').toLowerCase();
+  const c = EXT_COLORS[ext] || '#5b8def';
+  return `<svg viewBox="0 0 48 60" aria-hidden="true">
+    <path d="M5 1.5h27l13.5 13.5v41a2.5 2.5 0 0 1-2.5 2.5H5A2.5 2.5 0 0 1 2.5 56V4A2.5 2.5 0 0 1 5 1.5z" fill="#fff" stroke="rgba(0,0,0,.16)"/>
+    <path d="M32 1.5V12a3 3 0 0 0 3 3h10.5" fill="#ececf0" stroke="rgba(0,0,0,.16)"/>
+    <rect x="6" y="38" width="36" height="13" rx="3.5" fill="${c}"/>
+    <text x="24" y="47.6" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff" font-family="-apple-system,Helvetica,Arial,sans-serif">${esc(ext.toUpperCase().slice(0, 4))}</text></svg>`;
+}
+
+let fan = null;
+function closeFan() {
+  if (!fan) return;
+  const f = fan; fan = null;
+  f.items.forEach((it, i) => it.animate(
+    [{ transform: it.dataset.to, opacity: 1 }, { transform: 'translate(0,0) scale(.3)', opacity: 0 }],
+    { duration: dur(220), delay: dur((f.items.length - 1 - i) * 18), easing: 'cubic-bezier(.5,0,.75,0)', fill: 'forwards' }));
+  setTimeout(() => f.el.remove(), dur(260 + f.items.length * 18));
+}
+function openDownloads(from) {
+  if (fan) { closeFan(); return; }
+  closeAlert();
+  const r = from.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'fan';
+  el.setAttribute('role', 'menu');
+  el.setAttribute('aria-label', 'Downloads');
+  el.style.left = r.left + r.width / 2 + 'px';
+  el.style.top = r.top + 'px';
+  const items = SITE.downloads.map((d, i) => {
+    const a = document.createElement('a');
+    a.className = 'fan-item';
+    a.setAttribute('role', 'menuitem');
+    a.href = d.url || '#';
+    if (d.url) a.setAttribute('download', d.name);
+    else a.title = 'Add a link for this file in SITE.downloads';
+    a.innerHTML = `<span class="fan-label">${esc(d.name)}</span><span class="fan-icon">${docIcon(d.name)}</span>`;
+    // each file sits a step higher, curving slightly right and tilting — the macOS fan
+    a.dataset.to = `translate(${i * i * 2.2}px, ${-10 - i * 60}px) rotate(${i * 1.6}deg)`;
+    a.onclick = e => {
+      if (d.url) { setTimeout(closeFan, 150); return; }
+      e.preventDefault();
+      a.querySelector('.fan-label').animate(
+        [{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(5px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }],
+        { duration: dur(320) });
+    };
+    el.appendChild(a);
+    a.animate([{ transform: 'translate(0,0) scale(.3)', opacity: 0 }, { transform: a.dataset.to, opacity: 1 }],
+      { duration: dur(440), delay: dur(i * 30), easing: 'cubic-bezier(.22,1.2,.36,1)', fill: 'both' });
+    return a;
+  });
+  document.body.appendChild(el);
+  fan = { el, items };
+}
+// click anywhere else closes the fan
+document.addEventListener('pointerdown', e => {
+  if (fan && !e.target.closest('.fan') && !e.target.closest('.dock-item[aria-label="Downloads"]')) closeFan();
+}, true);
+
+/* ════════ Trash ════════ */
+const trashed = [];
+function overTrash(x, y) {
+  const r = dockItems.trash.getBoundingClientRect();
+  return x > r.left - 14 && x < r.right + 14 && y > r.top - 24 && y < r.bottom + 14;
+}
+function setTrashHot(on) { dockItems.trash.classList.toggle('hot', on); }
+function trashIcon(s) {
+  const r = s.el.getBoundingClientRect(), t = dockItems.trash.getBoundingClientRect();
+  const dx = t.left + t.width / 2 - (r.left + r.width / 2), dy = t.top + t.height / 2 - (r.top + r.height / 2);
+  const a = s.el.animate([
+    { transform: 'translate(-50%,-50%)', opacity: 1 },
+    { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(.15)`, opacity: 0 }
+  ], { duration: dur(380), easing: 'cubic-bezier(.5,0,.75,0)' });
+  a.onfinish = () => { s.el.classList.add('trashed'); s.el.classList.remove('selected'); };
+  s.trashed = true;
+  trashed.push(s);
+  refreshTrash();
+  bounce(dockItems.trash);
+}
+function putBack(s) {
+  trashed.splice(trashed.indexOf(s), 1);
+  s.trashed = false;
+  s.el.classList.remove('trashed');
+  if (isMobile()) layoutIcons(); else { s.x = s.p.x; s.y = s.p.y; place(s); }
+  s.el.animate([{ transform: 'translate(-50%,-50%) scale(.2)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }],
+    { duration: dur(520), easing: 'cubic-bezier(.22,1.3,.36,1)' });
+  refreshTrash();
+}
+function trashBody() {
+  if (!trashed.length) return `<div class="trash-list"><div class="trash-empty">Trash is empty. Drag an icon here to bin it.</div></div>`;
+  return `<div class="trash-list">${trashed.map(s => `<div class="trash-row"><div class="f-art" style="background:${art(s.p)}"></div>${esc(s.p.title)}<button data-id="${s.p.id}">Put Back</button></div>`).join('')}</div>
+    <div class="trash-foot"><button data-all>Put Back All</button></div>`;
+}
+function refreshTrash() {
+  dockItems.trash.querySelector('.di').innerHTML = trashSVG(trashed.length > 0);
+  const w = wins.get('trash');
+  if (w) { $('.wbody', w.el).innerHTML = trashBody(); bindTrash(w); }
+}
+function bindTrash(w) {
+  $$('.trash-row button', w.el).forEach(b => b.onclick = () => putBack(icons.get(b.dataset.id)));
+  const all = $('[data-all]', w.el); if (all) all.onclick = () => [...trashed].forEach(putBack);
+}
+function openTrash(from) {
+  const w = openWindow('trash', { title: 'Trash', body: trashBody(), from, width: 420, dockKey: 'trash', mini: '#d9d9de' });
+  bindTrash(w);
+}
+
+/* ════════ Dock ════════ */
+const SVG = {
+  folder: `<svg viewBox="0 0 64 64"><defs><linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd0ff"/><stop offset="1" stop-color="#3b93ea"/></linearGradient></defs>
+    <path d="M6 16c0-2.2 1.8-4 4-4h14l5 5h25c2.2 0 4 1.8 4 4v4H6z" fill="#5aa8f0"/>
+    <rect x="6" y="21" width="52" height="33" rx="4" fill="url(#fg)"/><rect x="6" y="21" width="52" height="2" fill="#fff" opacity=".35"/></svg>`,
+  notes: `<div class="glyph" style="background:#fffef6"><svg viewBox="0 0 64 64" style="position:absolute;inset:0">
+    <rect width="64" height="17" fill="#ffd54a"/><g stroke="#e3e0d2" stroke-width="1.5"><line x1="8" y1="28" x2="56" y2="28"/><line x1="8" y1="37" x2="56" y2="37"/><line x1="8" y1="46" x2="56" y2="46"/><line x1="8" y1="55" x2="56" y2="55"/></g>
+    <g fill="#c9a52a" opacity=".55"><circle cx="12" cy="17" r="1"/><circle cx="18" cy="17" r="1"/><circle cx="24" cy="17" r="1"/><circle cx="30" cy="17" r="1"/><circle cx="36" cy="17" r="1"/><circle cx="42" cy="17" r="1"/><circle cx="48" cy="17" r="1"/><circle cx="54" cy="17" r="1"/></g></svg></div>`,
+  gallery: `<div class="glyph" style="background:linear-gradient(150deg,#ffcf6b,#ff6fa5 55%,#7a5cff)"><svg viewBox="0 0 64 64" style="position:absolute;inset:0">
+    <circle cx="44" cy="20" r="7" fill="#fff" opacity=".95"/><path d="M6 52 24 30l12 14 8-9 14 17z" fill="#fff" opacity=".9"/></svg></div>`,
+  social: `<div class="glyph" style="background:radial-gradient(circle at 30% 110%,#ffd776,#f3a250 25%,#e1306c 55%,#833ab4 85%)"><svg viewBox="0 0 64 64" style="position:absolute;inset:0" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round">
+    <circle cx="32" cy="32" r="9"/><path d="M41 23v12c0 4 6 5 8 0 3-9-2-21-17-21a18 18 0 1 0 10 33"/></svg></div>`,
+  mail: `<div class="glyph" style="background:linear-gradient(#3fb4ff,#1478e0)"><svg viewBox="0 0 64 64" style="position:absolute;inset:0">
+    <rect x="12" y="19" width="40" height="27" rx="3" fill="#fff"/><path d="M13 21l19 14 19-14" fill="none" stroke="#1478e0" stroke-width="2.5" stroke-linejoin="round"/></svg></div>`,
+};
+// image-based dock icon (PNG/SVG/WebP)
+function imgIcon(src, pad = 0) {   // pad = inner margin in % for images with no built-in margin
+  return `<img src="${src}" alt="" draggable="false" style="width:100%;height:100%;display:block;object-fit:contain;padding:${pad}%;box-sizing:border-box;filter:drop-shadow(0 2px 3px rgba(0,0,0,.18))">`;
+}
+const TRASH_ICON = 'assets/trash.png';   // your bin icon; set to '' to use the drawn one below
+function trashSVG(full) {
+  if (TRASH_ICON) return imgIcon(TRASH_ICON);
+  return `<svg viewBox="0 0 64 64"><defs><linearGradient id="tg" x1="0" x2="1"><stop offset="0" stop-color="#e9e9ee" stop-opacity=".95"/><stop offset=".5" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#d5d5dc" stop-opacity=".95"/></linearGradient></defs>
+    ${full ? `<g><rect x="17" y="8" width="13" height="14" rx="1" fill="#ff7b54" transform="rotate(-14 23 15)"/><rect x="28" y="6" width="14" height="15" rx="1" fill="#5aa9ff" transform="rotate(10 35 13)"/><rect x="36" y="11" width="11" height="11" rx="1" fill="#ffd54a" transform="rotate(22 41 16)"/><rect x="22" y="12" width="18" height="12" rx="1" fill="#111"/></g>` : ''}
+    <ellipse cx="32" cy="15" rx="18" ry="4" fill="#c7c7cf"/>
+    <path d="M14 15l4 41c.3 2.3 2.2 4 4.5 4h19c2.3 0 4.2-1.7 4.5-4l4-41c-2 2.5-9.5 4-18 4s-16-1.5-18-4z" fill="url(#tg)" stroke="#b9b9c2" stroke-width=".8"/>
+    <g stroke="#b9b9c2" stroke-width="1"><line x1="23" y1="24" x2="25" y2="54"/><line x1="32" y1="25" x2="32" y2="55"/><line x1="41" y1="24" x2="39" y2="54"/></g></svg>`;
+}
+
+const DOCK = [
+  { key: 'ae',       tip: 'After Effects',    html: imgIcon('assets/aftereffects.png'), run: b => showAppAlert('ae', b) },
+  { key: 'ps',       tip: 'Photoshop',        html: imgIcon('assets/photoshop.png'),    run: b => showAppAlert('ps', b) },
+  { key: 'ai',       tip: 'Illustrator',      html: imgIcon('assets/illustrator.png'),  run: b => showAppAlert('ai', b) },
+  'sep',
+  { key: 'cv',       tip: 'CV',               html: imgIcon('assets/notes.png'),           run: openCV },
+  { key: 'error',    tip: 'Error',            html: imgIcon('assets/error.png', 9),      run: b => showAppAlert('error', b) },
+  { key: 'projects', tip: 'Projects',         html: imgIcon('assets/folder.png'), run: openProjectsFolder },
+  { key: 'gallery',  tip: 'Gallery',          html: imgIcon('assets/gallery.png'), run: openGallery },
+  'sep',
+  { key: 'social',   tip: SITE.social.label,  html: imgIcon('assets/instagram.png'), run: () => open(SITE.social.url, '_blank', 'noopener') },
+  { key: 'mail',     tip: 'Mail',             html: imgIcon('assets/mail.png'), run: () => { location.href = 'mailto:' + SITE.email; } },
+  'sep',
+  { key: 'downloads', tip: 'Downloads',       html: imgIcon('assets/downloads.png'),    run: openDownloads },
+  { key: 'trash',    tip: 'Trash',            html: trashSVG(false), run: openTrash },
+];
+const dockItems = {};
+
+function makeDockItem({ key, tip, html, run }) {
+  const b = document.createElement('button');
+  b.className = 'dock-item';
+  b.setAttribute('aria-label', tip);
+  b.innerHTML = `<span class="di">${html}</span><span class="tip">${esc(tip)}</span>`;
+  b.onclick = () => { bounce(b); run(b); };
+  if (key) dockItems[key] = b;
+  return b;
+}
+DOCK.forEach(d => {
+  if (d === 'sep') { const s = document.createElement('div'); s.className = 'dock-sep'; dockInner.appendChild(s); }
+  else dockInner.appendChild(makeDockItem(d));
+});
+
+function bounce(el) {
+  const di = el.querySelector('.di');
+  di.animate([
+    { transform: 'translateY(0)' }, { transform: 'translateY(-38%)', offset: .25 }, { transform: 'translateY(0)', offset: .5 },
+    { transform: 'translateY(-14%)', offset: .7 }, { transform: 'translateY(0)' }
+  ], { duration: dur(700), easing: 'ease-out' });
+}
+
+function setRunning() {
+  const keys = new Set([...wins.values()].map(w => w.dockKey).filter(Boolean));
+  ['cv', 'projects', 'gallery', 'trash'].forEach(k => dockItems[k].classList.toggle('running', keys.has(k)));
+}
+
+function addMini(w) {
+  const b = document.createElement('button');
+  b.className = 'dock-item';
+  b.setAttribute('aria-label', 'Restore ' + w.el.getAttribute('aria-label'));
+  b.innerHTML = `<span class="di"><span class="mini" style="width:100%;height:100%"><span class="mini-bar"><b></b><b></b><b></b></span><span class="mini-art" style="background:${w.mini || '#ccc'}"></span></span></span><span class="tip">${esc(w.el.getAttribute('aria-label'))}</span>`;
+  b.onclick = () => restoreWin(w);
+  b.style.setProperty('--s', 0);
+  dockInner.insertBefore(b, dockItems.trash);
+  requestAnimationFrame(() => b.style.setProperty('--s', 1));
+  w.miniEl = b;
+  return b;
+}
+function removeDockItem(b) {
+  b.style.setProperty('--s', 0);
+  b.style.opacity = 0;
+  setTimeout(() => b.remove(), 260);
+}
+
+/* magnification — measured from the resting layout so it doesn't jitter */
+const MAX_SCALE = 1.75, RANGE = 150;
+function restingCenters() {
+  const cs = getComputedStyle(dockInner);
+  const base = parseFloat(cs.getPropertyValue('--base')), gap = parseFloat(cs.columnGap) || 8;
+  const kids = [...dockInner.children];
+  const widths = kids.map(k => k.classList.contains('dock-sep') ? 5 : base);
+  const total = widths.reduce((a, b) => a + b, 0) + gap * (kids.length - 1);
+  let x = -total / 2;
+  return kids.map((k, i) => { const c = x + widths[i] / 2; x += widths[i] + gap; return { k, c }; });
+}
+dock.addEventListener('mousemove', e => {
+  if (isMobile() || REDUCED) return;
+  dock.classList.add('magnify');
+  const r = dockInner.getBoundingClientRect();
+  const mxRel = e.clientX - (r.left + r.width / 2);
+  restingCenters().forEach(({ k, c }) => {
+    if (!k.classList.contains('dock-item')) return;
+    const d = Math.abs(mxRel - c);
+    const s = 1 + (MAX_SCALE - 1) * Math.cos(Math.min(d / RANGE, 1) * Math.PI / 2);
+    k.style.setProperty('--s', s.toFixed(3));
+  });
+});
+dock.addEventListener('mouseleave', () => {
+  dock.classList.remove('magnify');
+  $$('.dock-item', dockInner).forEach(k => k.style.setProperty('--s', 1));
+});
+
+/* ════════ Keyboard ════════ */
+addEventListener('keydown', e => {
+  if (e.key === 'Escape' && fan) { closeFan(); return; }
+  if (e.key === 'Escape' && alertBox) { closeAlert(); return; }
+  if (e.key === 'Escape') {
+    const top = [...wins.values()].filter(w => !w.minimized).sort((a, b) => b.el.style.zIndex - a.el.style.zIndex)[0];
+    if (top) closeWin(top); else clearSelection();
+  }
+});
+
+/* ════════ Resize ════════ */
+let wasMobile = isMobile();
+addEventListener('resize', () => {
+  if (isMobile() !== wasMobile) { wasMobile = isMobile(); layoutIcons(); }
+  wins.forEach(w => {
+    if (w.maxed) return;
+    const W = Math.min(parseFloat(w.el.style.width), innerWidth - 20);
+    w.el.style.width = W + 'px';
+    w.el.style.left = Math.min(Math.max(10, parseFloat(w.el.style.left)), innerWidth - W - 10) + 'px';
+  });
+});
+
+/* ════════ Intro ════════ */
+PROJECTS.forEach(makeIcon);
+layoutIcons();
+
+function intro() {
+  wp.animate([{ opacity: 0, filter: 'blur(24px)', scale: '1.15' }, { opacity: 1, filter: 'blur(0px)', scale: '1' }],
+    { duration: dur(1400), easing: 'cubic-bezier(.2,.8,.2,1)' });
+  const cx = innerWidth / 2, cy = innerHeight / 2;
+  [...icons.values()].forEach((s, i) => {
+    const r = s.el.getBoundingClientRect();
+    const dx = (cx - (r.left + r.width / 2)) * .9, dy = (cy - (r.top + r.height / 2)) * .9;
+    s.el.querySelector('.icon-inner').animate([
+      { transform: `translate(${dx}px, ${dy}px) scale(.15) rotate(${(i % 2 ? 1 : -1) * 18}deg)`, opacity: 0 },
+      { opacity: 1, offset: .35 },
+      { transform: 'none', opacity: 1 }
+    ], { duration: dur(1000), delay: dur(350 + i * 55), easing: 'cubic-bezier(.22,1.15,.36,1)', fill: 'backwards' });
+  });
+  dock.animate([{ transform: 'translate(-50%, 140%)' }, { transform: 'translate(-50%, 0)' }],
+    { duration: dur(800), delay: dur(350 + icons.size * 55), easing: 'cubic-bezier(.22,1.2,.36,1)', fill: 'backwards' });
+}
+intro();
+</script>
+</body>
+</html>
